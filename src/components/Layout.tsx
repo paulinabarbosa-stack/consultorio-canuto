@@ -5,6 +5,7 @@ import Pacientes from '../pages/Pacientes'
 import Agendamentos from '../pages/Agendamentos'
 import Atendimentos from '../pages/Atendimentos'
 import Financeiro from '../pages/Financeiro'
+import Estoque from '../pages/Estoque'
 
 const menus = [
   { path: '/', label: 'Dashboard', icon: '📊' },
@@ -97,6 +98,7 @@ export default function Layout() {
             <Route path="/agendamentos" element={<Agendamentos />} />
             <Route path="/atendimentos" element={<Atendimentos />} />
             <Route path="/financeiro" element={<Financeiro />} />
+            <Route path="/estoque" element={<Estoque />} />
           </Routes>
         </div>
       </div>
