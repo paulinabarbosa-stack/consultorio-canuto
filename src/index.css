@@ -1,3 +1,10 @@
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+@import "tailwindcss";
+
+@theme {
+  --color-verde-50: #f0faf4;
+  --color-verde-100: #d4edda;
+  --color-verde-500: #2d8a52;
+  --color-verde-600: #1a6b3c;
+  --color-verde-700: #0f4a28;
+  --color-verde-900: #07291a;
+}
