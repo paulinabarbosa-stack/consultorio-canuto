@@ -3,7 +3,6 @@ import { supabase } from '../lib/supabase'
 
 export default function Rendimento() {
   const [dados, setDados] = useState<any[]>([])
-  const [dentistas, setDentistas] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [mes, setMes] = useState(new Date().toISOString().slice(0, 7))
 
