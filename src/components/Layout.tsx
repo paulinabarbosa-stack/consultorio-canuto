@@ -1,9 +1,9 @@
-import { useState } from 'react'
 import { Routes, Route, useNavigate, useLocation } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import Dashboard from '../pages/Dashboard'
 import Pacientes from '../pages/Pacientes'
 import Agendamentos from '../pages/Agendamentos'
+import Atendimentos from '../pages/Atendimentos'
 
 const menus = [
   { path: '/', label: 'Dashboard', icon: '📊' },
@@ -36,10 +36,10 @@ export default function Layout() {
       <div className="w-56 bg-gray-900 border-r border-gray-800 flex flex-col flex-shrink-0">
         <div className="p-4 border-b border-gray-800">
           <div className="flex items-center gap-2">
-            <div className="w-8 h-8 bg-verde-600 rounded-lg flex items-center justify-center text-lg">🦷</div>
+            <div className="w-8 h-8 bg-green-700 rounded-lg flex items-center justify-center text-lg">🦷</div>
             <div>
               <div className="text-white text-xs font-bold leading-tight">Consultórios</div>
-              <div className="text-verde-500 text-xs">Thiago Canuto</div>
+              <div className="text-green-500 text-xs">Thiago Canuto</div>
             </div>
           </div>
         </div>
@@ -48,28 +48,28 @@ export default function Layout() {
           <div className="text-gray-600 text-xs font-bold uppercase tracking-wider px-2 py-2">Principal</div>
           {menus.slice(0, 4).map(m => (
             <button key={m.path} onClick={() => navigate(m.path)}
-              className={`w-full flex items-center gap-2 px-3 py-2 rounded-lg text-sm mb-0.5 transition-colors ${location.pathname === m.path ? 'bg-verde-700 text-verde-300' : 'text-gray-400 hover:bg-gray-800 hover:text-white'}`}>
+              className={`w-full flex items-center gap-2 px-3 py-2 rounded-lg text-sm mb-0.5 transition-colors ${location.pathname === m.path ? 'bg-green-900 text-green-300' : 'text-gray-400 hover:bg-gray-800 hover:text-white'}`}>
               <span>{m.icon}</span><span>{m.label}</span>
             </button>
           ))}
           <div className="text-gray-600 text-xs font-bold uppercase tracking-wider px-2 py-2 mt-2">Pacientes</div>
           {menus.slice(4, 7).map(m => (
             <button key={m.path} onClick={() => navigate(m.path)}
-              className={`w-full flex items-center gap-2 px-3 py-2 rounded-lg text-sm mb-0.5 transition-colors ${location.pathname === m.path ? 'bg-verde-700 text-verde-300' : 'text-gray-400 hover:bg-gray-800 hover:text-white'}`}>
+              className={`w-full flex items-center gap-2 px-3 py-2 rounded-lg text-sm mb-0.5 transition-colors ${location.pathname === m.path ? 'bg-green-900 text-green-300' : 'text-gray-400 hover:bg-gray-800 hover:text-white'}`}>
               <span>{m.icon}</span><span>{m.label}</span>
             </button>
           ))}
           <div className="text-gray-600 text-xs font-bold uppercase tracking-wider px-2 py-2 mt-2">Gestão</div>
           {menus.slice(7, 10).map(m => (
             <button key={m.path} onClick={() => navigate(m.path)}
-              className={`w-full flex items-center gap-2 px-3 py-2 rounded-lg text-sm mb-0.5 transition-colors ${location.pathname === m.path ? 'bg-verde-700 text-verde-300' : 'text-gray-400 hover:bg-gray-800 hover:text-white'}`}>
+              className={`w-full flex items-center gap-2 px-3 py-2 rounded-lg text-sm mb-0.5 transition-colors ${location.pathname === m.path ? 'bg-green-900 text-green-300' : 'text-gray-400 hover:bg-gray-800 hover:text-white'}`}>
               <span>{m.icon}</span><span>{m.label}</span>
             </button>
           ))}
           <div className="text-gray-600 text-xs font-bold uppercase tracking-wider px-2 py-2 mt-2">Administração</div>
           {menus.slice(10).map(m => (
             <button key={m.path} onClick={() => navigate(m.path)}
-              className={`w-full flex items-center gap-2 px-3 py-2 rounded-lg text-sm mb-0.5 transition-colors ${location.pathname === m.path ? 'bg-verde-700 text-verde-300' : 'text-gray-400 hover:bg-gray-800 hover:text-white'}`}>
+              className={`w-full flex items-center gap-2 px-3 py-2 rounded-lg text-sm mb-0.5 transition-colors ${location.pathname === m.path ? 'bg-green-900 text-green-300' : 'text-gray-400 hover:bg-gray-800 hover:text-white'}`}>
               <span>{m.icon}</span><span>{m.label}</span>
             </button>
           ))}
@@ -94,6 +94,7 @@ export default function Layout() {
             <Route path="/" element={<Dashboard />} />
             <Route path="/pacientes" element={<Pacientes />} />
             <Route path="/agendamentos" element={<Agendamentos />} />
+            <Route path="/atendimentos" element={<Atendimentos />} />
           </Routes>
         </div>
       </div>
