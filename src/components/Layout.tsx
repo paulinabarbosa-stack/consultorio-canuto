@@ -7,6 +7,10 @@ import Atendimentos from '../pages/Atendimentos'
 import Financeiro from '../pages/Financeiro'
 import Estoque from '../pages/Estoque'
 import Rendimento from '../pages/Rendimento'
+import Aniversariantes from '../pages/Aniversariantes'
+import Retornos from '../pages/Retornos'
+import Dentistas from '../pages/Dentistas'
+import Clinicas from '../pages/Clinicas'
 
 const menus = [
   { path: '/', label: 'Dashboard', icon: '📊' },
@@ -99,9 +103,12 @@ export default function Layout() {
             <Route path="/agendamentos" element={<Agendamentos />} />
             <Route path="/atendimentos" element={<Atendimentos />} />
             <Route path="/financeiro" element={<Financeiro />} />
+            <Route path="/rendimento" element={<Rendimento />} />
             <Route path="/estoque" element={<Estoque />} />
-            <Route path="/rendimento" element={<Rendimento />} />
-            <Route path="/rendimento" element={<Rendimento />} />
+            <Route path="/aniversariantes" element={<Aniversariantes />} />
+            <Route path="/retornos" element={<Retornos />} />
+            <Route path="/dentistas" element={<Dentistas />} />
+            <Route path="/clinicas" element={<Clinicas />} />
           </Routes>
         </div>
       </div>
