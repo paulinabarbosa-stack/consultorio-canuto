@@ -3,6 +3,7 @@ import { Routes, Route, useNavigate, useLocation } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import Dashboard from '../pages/Dashboard'
 import Pacientes from '../pages/Pacientes'
+import Agendamentos from '../pages/Agendamentos'
 
 const menus = [
   { path: '/', label: 'Dashboard', icon: '📊' },
@@ -92,6 +93,7 @@ export default function Layout() {
           <Routes>
             <Route path="/" element={<Dashboard />} />
             <Route path="/pacientes" element={<Pacientes />} />
+            <Route path="/agendamentos" element={<Agendamentos />} />
           </Routes>
         </div>
       </div>
