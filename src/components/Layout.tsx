@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { Routes, Route, useNavigate, useLocation } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import Dashboard from '../pages/Dashboard'
+import Pacientes from '../pages/Pacientes'
 
 const menus = [
   { path: '/', label: 'Dashboard', icon: '📊' },
@@ -22,7 +23,6 @@ const menus = [
 export default function Layout() {
   const navigate = useNavigate()
   const location = useLocation()
-  const [menuAberto, setMenuAberto] = useState(false)
 
   async function sair() {
     await supabase.auth.signOut()
@@ -32,7 +32,6 @@ export default function Layout() {
 
   return (
     <div className="min-h-screen bg-gray-950 flex">
-      {/* Sidebar */}
       <div className="w-56 bg-gray-900 border-r border-gray-800 flex flex-col flex-shrink-0">
         <div className="p-4 border-b border-gray-800">
           <div className="flex items-center gap-2">
@@ -82,7 +81,6 @@ export default function Layout() {
         </div>
       </div>
 
-      {/* Main */}
       <div className="flex-1 flex flex-col overflow-hidden">
         <div className="bg-gray-900 border-b border-gray-800 px-6 py-3 flex items-center justify-between">
           <h1 className="text-white font-semibold flex items-center gap-2">
@@ -93,6 +91,7 @@ export default function Layout() {
         <div className="flex-1 overflow-y-auto p-6">
           <Routes>
             <Route path="/" element={<Dashboard />} />
+            <Route path="/pacientes" element={<Pacientes />} />
           </Routes>
         </div>
       </div>
