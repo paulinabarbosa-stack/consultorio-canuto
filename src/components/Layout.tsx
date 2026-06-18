@@ -13,6 +13,7 @@ import Dentistas from '../pages/Dentistas'
 import Clinicas from '../pages/Clinicas'
 import Agenda from '../pages/Agenda'
 import RelatorioDiario from '../pages/RelatorioDiario'
+import Usuarios from '../pages/Usuarios'
 
 const menus = [
   { path: '/', label: 'Dashboard', icon: '📊' },
@@ -114,6 +115,7 @@ export default function Layout() {
             <Route path="/clinicas" element={<Clinicas />} />
             <Route path="/agenda" element={<Agenda />} />
             <Route path="/relatorio" element={<RelatorioDiario />} />
+            <Route path="/usuarios" element={<Usuarios />} />
           </Routes>
         </div>
       </div>
