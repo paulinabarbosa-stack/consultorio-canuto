@@ -12,10 +12,12 @@ import Retornos from '../pages/Retornos'
 import Dentistas from '../pages/Dentistas'
 import Clinicas from '../pages/Clinicas'
 import Agenda from '../pages/Agenda'
+import RelatorioDiario from '../pages/RelatorioDiario'
 
 const menus = [
   { path: '/', label: 'Dashboard', icon: '📊' },
   { path: '/agenda', label: 'Agenda', icon: '📅' },
+  { path: '/relatorio', label: 'Relatório Diário', icon: '📋' },
   { path: '/agendamentos', label: 'Agendamentos', icon: '🗓️' },
   { path: '/atendimentos', label: 'Atendimentos', icon: '🦷' },
   { path: '/pacientes', label: 'Pacientes / CRM', icon: '👥' },
@@ -111,6 +113,7 @@ export default function Layout() {
             <Route path="/dentistas" element={<Dentistas />} />
             <Route path="/clinicas" element={<Clinicas />} />
             <Route path="/agenda" element={<Agenda />} />
+            <Route path="/relatorio" element={<RelatorioDiario />} />
           </Routes>
         </div>
       </div>
