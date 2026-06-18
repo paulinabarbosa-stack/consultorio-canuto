@@ -63,7 +63,7 @@ export default function Usuarios() {
 
   useEffect(() => { carregar(); }, []);
 
-  async function excluir(id: string, authId: string) {
+  async function excluir(id: string, _authId: string) {
     // Remove da tabela usuarios
     await supabase.from("usuarios").delete().eq("id", id);
     // Remove do Auth do Supabase via admin (só funciona com service role — orientar fazer manual se necessário)

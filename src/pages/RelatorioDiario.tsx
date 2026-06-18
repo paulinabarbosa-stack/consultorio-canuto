@@ -5,7 +5,6 @@ import { FileText, Printer, ChevronLeft, ChevronRight, Calendar } from "lucide-r
 // ─── Tipos ────────────────────────────────────────────────────────────────────
 
 interface Clinica { id: string; nome: string; }
-interface Dentista { id: string; nome: string; }
 
 interface Atendimento {
   id: string;
@@ -18,7 +17,6 @@ interface Atendimento {
   forma_pagamento: string;
   comissao_valor: number;
   comissao_percentual: number;
-  status_agendamento: string;
   protetico_nome?: string;
   protetico_valor?: number;
 }
