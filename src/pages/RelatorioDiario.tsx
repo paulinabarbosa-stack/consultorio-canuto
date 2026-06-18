@@ -74,7 +74,6 @@ export default function RelatorioDiario() {
   const [clinicaId, setClinicaId] = useState("");
   const [clinicaNome, setClinicaNome] = useState("");
   const [data, setData] = useState(toISO(new Date()));
-  const [dentistas, setDentistas] = useState<Dentista[]>([]);
   const [agendamentos, setAgendamentos] = useState<AgendamentoSimples[]>([]);
   const [atendimentos, setAtendimentos] = useState<Atendimento[]>([]);
   const [loading, setLoading] = useState(false);
@@ -116,15 +115,6 @@ export default function RelatorioDiario() {
     if (!clinicaId || !data) return;
     async function carregar() {
       setLoading(true);
-
-      // Dentistas da clínica
-      const { data: dc } = await supabase
-        .from("dentista_clinica")
-        .select("dentistas(id, nome)")
-        .eq("clinica_id", clinicaId);
-      if (dc) {
-        setDentistas(dc.map((r: any) => ({ id: r.dentistas.id, nome: r.dentistas.nome })));
-      }
 
       // Agendamentos do dia
       const inicio = data + "T00:00:00";

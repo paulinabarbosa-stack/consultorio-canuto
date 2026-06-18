@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { supabase } from "../lib/supabase";
-import { ChevronLeft, ChevronRight, Calendar, Clock, Plus, X, User } from "lucide-react";
+import { ChevronLeft, ChevronRight, Calendar, Plus, X, User } from "lucide-react";
 
 // ─── Tipos ───────────────────────────────────────────────────────────────────
 
