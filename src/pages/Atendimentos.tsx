@@ -25,7 +25,8 @@ export default function Atendimentos() {
 
   const [form, setForm] = useState({
     paciente_id: '', dentista_id: '', clinica_id: '',
-    procedimento_id: '', data_atendimento: new Date().toISOString().split('T')[0],
+    procedimento_id: '', procedimento_outro: '',
+    data_atendimento: new Date().toISOString().split('T')[0],
     valor: '', forma_pagamento: '', observacoes: ''
   })
 
@@ -63,30 +64,53 @@ export default function Atendimentos() {
   async function salvar() {
     if (!form.paciente_id || !form.dentista_id || !form.clinica_id || !form.valor || !form.forma_pagamento)
       return alert('Preencha paciente, dentista, clínica, valor e forma de pagamento!')
+    if (form.procedimento_id === 'outros' && !form.procedimento_outro.trim())
+      return alert('Descreva o procedimento no campo "Qual procedimento?"')
     setSalvando(true)
     const valor = parseFloat(form.valor)
-    const pctComissao = (form.forma_pagamento === 'Dinheiro') ? 40 : 36
+    const pctComissao = (form.forma_pagamento === 'Dinheiro' || form.forma_pagamento === 'Cheque') ? 40 : 36
     const comissaoValor = valor * pctComissao / 100
+
+    // Se for "Outros", salva sem procedimento_id mas com observação do procedimento
+    const procedimentoId = form.procedimento_id === 'outros' ? null : (form.procedimento_id || null)
+    const observacoes = form.procedimento_id === 'outros'
+      ? `Procedimento: ${form.procedimento_outro}${form.observacoes ? ' | ' + form.observacoes : ''}`
+      : (form.observacoes || null)
+
     const { error } = await supabase.from('atendimentos').insert([{
       paciente_id: form.paciente_id,
       dentista_id: form.dentista_id,
       clinica_id: form.clinica_id,
-      procedimento_id: form.procedimento_id || null,
+      procedimento_id: procedimentoId,
       data_atendimento: form.data_atendimento,
       valor, forma_pagamento: form.forma_pagamento,
       comissao_percentual: pctComissao,
       comissao_valor: comissaoValor,
-      observacoes: form.observacoes || null,
+      observacoes,
     }])
     if (error) { alert('Erro: ' + error.message); setSalvando(false); return }
     setModalAberto(false)
-    setForm({ paciente_id: '', dentista_id: '', clinica_id: '', procedimento_id: '', data_atendimento: new Date().toISOString().split('T')[0], valor: '', forma_pagamento: '', observacoes: '' })
+    setForm({
+      paciente_id: '', dentista_id: '', clinica_id: '',
+      procedimento_id: '', procedimento_outro: '',
+      data_atendimento: new Date().toISOString().split('T')[0],
+      valor: '', forma_pagamento: '', observacoes: ''
+    })
     await carregar()
     setSalvando(false)
   }
 
   function formatarDinheiro(v: number) {
     return v?.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }) || 'R$ 0,00'
+  }
+
+  // Nome do procedimento para exibir na tabela
+  function nomeProcedimento(a: any): string {
+    if (a.procedimentos?.nome) return a.procedimentos.nome
+    if (a.observacoes?.startsWith('Procedimento: ')) {
+      return a.observacoes.split(' | ')[0].replace('Procedimento: ', '') + ' (Outros)'
+    }
+    return '—'
   }
 
   const totalReceita = atendimentos.reduce((acc, a) => acc + (parseFloat(a.valor) || 0), 0)
@@ -171,7 +195,7 @@ export default function Atendimentos() {
               {atendimentos.map((a, i) => (
                 <tr key={a.id} className={i < atendimentos.length - 1 ? 'border-b border-gray-800' : ''}>
                   <td className="px-4 py-3"><div className="text-white text-sm font-medium">{a.pacientes?.nome}</div></td>
-                  <td className="px-4 py-3"><div className="text-gray-400 text-sm">{a.procedimentos?.nome || '—'}</div></td>
+                  <td className="px-4 py-3"><div className="text-gray-400 text-sm">{nomeProcedimento(a)}</div></td>
                   <td className="px-4 py-3"><div className="text-gray-400 text-sm">{a.dentistas?.nome}</div></td>
                   <td className="px-4 py-3"><div className="text-gray-400 text-sm">{a.clinicas?.nome}</div></td>
                   <td className="px-4 py-3 text-right"><div className="text-green-400 text-sm font-semibold">{formatarDinheiro(a.valor)}</div></td>
@@ -228,12 +252,29 @@ export default function Atendimentos() {
                 </div>
                 <div className="col-span-2">
                   <label className="text-gray-400 text-xs block mb-1">Procedimento</label>
-                  <select value={form.procedimento_id} onChange={e => setForm({...form, procedimento_id: e.target.value})}
+                  <select value={form.procedimento_id} onChange={e => setForm({...form, procedimento_id: e.target.value, procedimento_outro: ''})}
                     className="w-full bg-gray-800 border border-gray-700 text-white rounded-lg px-3 py-2 text-sm focus:outline-none">
                     <option value="">Selecione...</option>
                     {procedimentos.map(p => <option key={p.id} value={p.id}>{p.nome}</option>)}
+                    <option value="outros">Outros (digitar manualmente)</option>
                   </select>
                 </div>
+
+                {/* Campo livre para "Outros" */}
+                {form.procedimento_id === 'outros' && (
+                  <div className="col-span-2">
+                    <label className="text-gray-400 text-xs block mb-1">Qual procedimento? *</label>
+                    <input
+                      type="text"
+                      value={form.procedimento_outro}
+                      onChange={e => setForm({...form, procedimento_outro: e.target.value})}
+                      placeholder="Descreva o procedimento..."
+                      className="w-full bg-gray-800 border border-yellow-600 text-white rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-yellow-500"
+                      autoFocus
+                    />
+                  </div>
+                )}
+
                 <div>
                   <label className="text-gray-400 text-xs block mb-1">Data *</label>
                   <input type="date" value={form.data_atendimento}
@@ -263,8 +304,8 @@ export default function Atendimentos() {
                   <div className="col-span-2 bg-gray-800 rounded-lg p-3 text-sm">
                     <span className="text-gray-400">Comissão do dentista: </span>
                     <span className="text-yellow-400 font-semibold">
-                      {form.forma_pagamento === 'Dinheiro' ? '40%' : '36%'} = {' '}
-                      {(parseFloat(form.valor) * (form.forma_pagamento === 'Dinheiro' ? 0.40 : 0.36)).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                      {(form.forma_pagamento === 'Dinheiro' || form.forma_pagamento === 'Cheque') ? '40%' : '36%'} ={' '}
+                      {(parseFloat(form.valor) * ((form.forma_pagamento === 'Dinheiro' || form.forma_pagamento === 'Cheque') ? 0.40 : 0.36)).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
                     </span>
                   </div>
                 )}
