@@ -27,7 +27,7 @@ export default function Financeiro() {
 
       let qEntradas = supabase
         .from('atendimentos')
-        .select('*, dentistas(nome), clinicas(nome), procedimentos(nome)')
+        .select('*, pacientes(nome), dentistas(nome), clinicas(nome), procedimentos(nome)')
         .gte('data_atendimento', inicioMes)
         .lte('data_atendimento', fimMes)
         .order('data_atendimento', { ascending: false })
@@ -78,6 +78,15 @@ export default function Financeiro() {
 
   function fmt(v: number) {
     return (v || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
+  }
+
+  // Exibe procedimento corretamente, inclusive quando foi digitado como "Outros"
+  function nomeProcedimento(e: any): string {
+    if (e.procedimentos?.nome) return e.procedimentos.nome
+    if (e.observacoes?.startsWith('Procedimento: ')) {
+      return e.observacoes.split(' | ')[0].replace('Procedimento: ', '') + ' (Outros)'
+    }
+    return '—'
   }
 
   const totalEntradas = entradas.reduce((acc, e) => acc + (parseFloat(e.valor) || 0), 0)
@@ -171,8 +180,8 @@ export default function Financeiro() {
                     <td className="px-4 py-3 text-gray-400 text-sm whitespace-nowrap">
                       {new Date(e.data_atendimento).toLocaleDateString('pt-BR')}
                     </td>
-                    <td className="px-4 py-3 text-white text-sm">{e.pacientes?.nome || '—'}</td>
-                    <td className="px-4 py-3 text-gray-400 text-sm">{e.procedimentos?.nome || '—'}</td>
+                    <td className="px-4 py-3 text-white text-sm font-medium">{e.pacientes?.nome || '—'}</td>
+                    <td className="px-4 py-3 text-gray-400 text-sm">{nomeProcedimento(e)}</td>
                     <td className="px-4 py-3 text-gray-400 text-sm">{e.dentistas?.nome || '—'}</td>
                     <td className="px-4 py-3 text-gray-400 text-sm">{e.clinicas?.nome || '—'}</td>
                     <td className="px-4 py-3 text-gray-400 text-sm">{e.forma_pagamento}</td>
