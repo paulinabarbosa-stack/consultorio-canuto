@@ -36,13 +36,13 @@ const SECOES = [
       { path: '/aniversariantes', label: 'Aniversariantes', icon: '🎂' },
       { path: '/retornos', label: 'Retornos', icon: '🔔' },
       { path: '/estoque', label: 'Estoque', icon: '📦' },
+      { path: '/financeiro', label: 'Financeiro', icon: '💰' },
     ]
   },
   {
     label: 'Gestão',
     perfil: 'admin_gerente',
     itens: [
-      { path: '/financeiro', label: 'Financeiro', icon: '💰' },
       { path: '/rendimento', label: 'Rendimento', icon: '📈' },
     ]
   },
