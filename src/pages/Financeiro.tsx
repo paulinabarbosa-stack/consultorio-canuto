@@ -6,16 +6,35 @@ export default function Financeiro() {
   const [saidas, setSaidas] = useState<any[]>([])
   const [clinicas, setClinicas] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
-  const [abaAtiva, setAbaAtiva] = useState<'entradas'|'saidas'>('entradas')
+  const [abaAtiva, setAbaAtiva] = useState<'entradas'|'saidas'|'dentistas'>('entradas')
   const [modalSaida, setModalSaida] = useState(false)
   const [salvando, setSalvando] = useState(false)
   const [mes, setMes] = useState(new Date().toISOString().slice(0, 7))
   const [filtroClinica, setFiltroClinica] = useState('')
+  const [clinicaIdUsuario, setClinicaIdUsuario] = useState<string | null>(null)
+  const [perfilAdmin, setPerfilAdmin] = useState(true)
 
   const [form, setForm] = useState({
     clinica_id: '', descricao: '', valor: '',
     categoria: '', data_saida: new Date().toISOString().split('T')[0]
   })
+
+  useEffect(() => {
+    async function carregarUsuario() {
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user) return
+      const { data } = await supabase.from('usuarios').select('perfil, clinica_id').eq('auth_id', user.id).maybeSingle()
+      if (data) {
+        setPerfilAdmin(data.perfil !== 'secretaria')
+        if (data.clinica_id) {
+          setClinicaIdUsuario(data.clinica_id)
+          setFiltroClinica(data.clinica_id)
+          setForm(f => ({ ...f, clinica_id: data.clinica_id }))
+        }
+      }
+    }
+    carregarUsuario()
+  }, [])
 
   useEffect(() => { carregar() }, [mes, filtroClinica])
 
@@ -52,9 +71,7 @@ export default function Financeiro() {
       if (e) setEntradas(e)
       if (s) setSaidas(s)
       if (c) setClinicas(c)
-    } catch (err) {
-      console.error(err)
-    }
+    } catch (err) { console.error(err) }
     setLoading(false)
   }
 
@@ -71,7 +88,7 @@ export default function Financeiro() {
     }])
     if (error) { alert('Erro: ' + error.message); setSalvando(false); return }
     setModalSaida(false)
-    setForm({ clinica_id: '', descricao: '', valor: '', categoria: '', data_saida: new Date().toISOString().split('T')[0] })
+    setForm({ clinica_id: clinicaIdUsuario || '', descricao: '', valor: '', categoria: '', data_saida: new Date().toISOString().split('T')[0] })
     await carregar()
     setSalvando(false)
   }
@@ -80,7 +97,6 @@ export default function Financeiro() {
     return (v || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
   }
 
-  // Exibe procedimento corretamente, inclusive quando foi digitado como "Outros"
   function nomeProcedimento(e: any): string {
     if (e.procedimentos?.nome) return e.procedimentos.nome
     if (e.observacoes?.startsWith('Procedimento: ')) {
@@ -88,6 +104,19 @@ export default function Financeiro() {
     }
     return '—'
   }
+
+  // Resumo por dentista
+  const resumoDentistas = Object.values(
+    entradas.reduce((acc: any, e: any) => {
+      const nome = e.dentistas?.nome ?? 'Sem dentista'
+      const id = e.dentista_id ?? 'sem'
+      if (!acc[id]) acc[id] = { nome, total: 0, comissao: 0, qtd: 0 }
+      acc[id].total += parseFloat(e.valor) || 0
+      acc[id].comissao += parseFloat(e.comissao_valor) || 0
+      acc[id].qtd += 1
+      return acc
+    }, {})
+  ) as any[]
 
   const totalEntradas = entradas.reduce((acc, e) => acc + (parseFloat(e.valor) || 0), 0)
   const totalSaidas = saidas.reduce((acc, s) => acc + (parseFloat(s.valor) || 0), 0)
@@ -113,11 +142,18 @@ export default function Financeiro() {
       <div className="flex gap-3 mb-6 flex-wrap">
         <input type="month" value={mes} onChange={e => setMes(e.target.value)}
           className="bg-gray-900 border border-gray-800 text-white rounded-lg px-3 py-2 text-sm focus:outline-none" />
-        <select value={filtroClinica} onChange={e => setFiltroClinica(e.target.value)}
-          className="bg-gray-900 border border-gray-800 text-white rounded-lg px-3 py-2 text-sm focus:outline-none">
-          <option value="">Todas as clínicas</option>
-          {clinicas.map(c => <option key={c.id} value={c.id}>{c.nome}</option>)}
-        </select>
+        {perfilAdmin && (
+          <select value={filtroClinica} onChange={e => setFiltroClinica(e.target.value)}
+            className="bg-gray-900 border border-gray-800 text-white rounded-lg px-3 py-2 text-sm focus:outline-none">
+            <option value="">Todas as clínicas</option>
+            {clinicas.map(c => <option key={c.id} value={c.id}>{c.nome}</option>)}
+          </select>
+        )}
+        {!perfilAdmin && (
+          <span className="bg-gray-900 border border-gray-800 text-gray-400 rounded-lg px-3 py-2 text-sm">
+            📍 {clinicas.find(c => c.id === clinicaIdUsuario)?.nome}
+          </span>
+        )}
       </div>
 
       {/* Cards resumo */}
@@ -149,6 +185,10 @@ export default function Financeiro() {
         <button onClick={() => setAbaAtiva('saidas')}
           className={`px-4 py-2 rounded-lg text-sm font-semibold transition-colors ${abaAtiva === 'saidas' ? 'bg-red-900 text-red-300' : 'bg-gray-900 text-gray-400 hover:text-white'}`}>
           📉 Saídas ({saidas.length})
+        </button>
+        <button onClick={() => setAbaAtiva('dentistas')}
+          className={`px-4 py-2 rounded-lg text-sm font-semibold transition-colors ${abaAtiva === 'dentistas' ? 'bg-yellow-900 text-yellow-300' : 'bg-gray-900 text-gray-400 hover:text-white'}`}>
+          👨‍⚕️ Por dentista ({resumoDentistas.length})
         </button>
       </div>
 
@@ -193,7 +233,7 @@ export default function Financeiro() {
             </table>
           </div>
         )
-      ) : (
+      ) : abaAtiva === 'saidas' ? (
         saidas.length === 0 ? (
           <div className="bg-gray-900 border border-gray-800 rounded-xl p-12 text-center">
             <div className="text-gray-400">Nenhuma saída registrada neste período</div>
@@ -226,6 +266,45 @@ export default function Financeiro() {
             </table>
           </div>
         )
+      ) : (
+        /* Aba por dentista */
+        resumoDentistas.length === 0 ? (
+          <div className="bg-gray-900 border border-gray-800 rounded-xl p-12 text-center">
+            <div className="text-gray-400">Nenhuma entrada registrada neste período</div>
+          </div>
+        ) : (
+          <div className="bg-gray-900 border border-gray-800 rounded-xl overflow-hidden">
+            <table className="w-full">
+              <thead>
+                <tr className="border-b border-gray-800">
+                  <th className="text-left text-gray-500 text-xs px-4 py-3">Dentista</th>
+                  <th className="text-center text-gray-500 text-xs px-4 py-3">Atendimentos</th>
+                  <th className="text-right text-gray-500 text-xs px-4 py-3">Total produzido</th>
+                  <th className="text-right text-gray-500 text-xs px-4 py-3">Comissão a pagar</th>
+                  <th className="text-right text-gray-500 text-xs px-4 py-3">Líquido clínica</th>
+                </tr>
+              </thead>
+              <tbody>
+                {resumoDentistas.sort((a, b) => b.total - a.total).map((d, i) => (
+                  <tr key={i} className={i < resumoDentistas.length - 1 ? 'border-b border-gray-800' : ''}>
+                    <td className="px-4 py-3 text-white text-sm font-medium">👨‍⚕️ {d.nome}</td>
+                    <td className="px-4 py-3 text-center text-gray-400 text-sm">{d.qtd}</td>
+                    <td className="px-4 py-3 text-right text-green-400 text-sm font-semibold">{fmt(d.total)}</td>
+                    <td className="px-4 py-3 text-right text-yellow-400 text-sm font-semibold">{fmt(d.comissao)}</td>
+                    <td className="px-4 py-3 text-right text-white text-sm font-semibold">{fmt(d.total - d.comissao)}</td>
+                  </tr>
+                ))}
+                <tr className="border-t-2 border-gray-700 bg-gray-800/50">
+                  <td className="px-4 py-3 text-white font-bold text-sm">Total</td>
+                  <td className="px-4 py-3 text-center text-white font-bold text-sm">{resumoDentistas.reduce((a, d) => a + d.qtd, 0)}</td>
+                  <td className="px-4 py-3 text-right text-green-400 font-bold text-sm">{fmt(totalEntradas)}</td>
+                  <td className="px-4 py-3 text-right text-yellow-400 font-bold text-sm">{fmt(totalComissoes)}</td>
+                  <td className="px-4 py-3 text-right text-green-400 font-bold text-sm">{fmt(totalEntradas - totalComissoes)}</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        )
       )}
 
       {/* MODAL SAÍDA */}
@@ -240,7 +319,7 @@ export default function Financeiro() {
               <div>
                 <label className="text-gray-400 text-xs block mb-1">Descrição *</label>
                 <input value={form.descricao} onChange={e => setForm({...form, descricao: e.target.value})}
-                  placeholder="Ex: Aluguel clínica Palha, Material odontológico..."
+                  placeholder="Ex: Aluguel, Material odontológico..."
                   className="w-full bg-gray-800 border border-gray-700 text-white rounded-lg px-3 py-2 text-sm focus:outline-none" />
               </div>
               <div className="grid grid-cols-2 gap-3">
@@ -266,11 +345,17 @@ export default function Financeiro() {
                 </div>
                 <div>
                   <label className="text-gray-400 text-xs block mb-1">Clínica</label>
-                  <select value={form.clinica_id} onChange={e => setForm({...form, clinica_id: e.target.value})}
-                    className="w-full bg-gray-800 border border-gray-700 text-white rounded-lg px-3 py-2 text-sm focus:outline-none">
-                    <option value="">Todas</option>
-                    {clinicas.map(c => <option key={c.id} value={c.id}>{c.nome}</option>)}
-                  </select>
+                  {perfilAdmin ? (
+                    <select value={form.clinica_id} onChange={e => setForm({...form, clinica_id: e.target.value})}
+                      className="w-full bg-gray-800 border border-gray-700 text-white rounded-lg px-3 py-2 text-sm focus:outline-none">
+                      <option value="">Todas</option>
+                      {clinicas.map(c => <option key={c.id} value={c.id}>{c.nome}</option>)}
+                    </select>
+                  ) : (
+                    <div className="bg-gray-800 border border-gray-700 text-gray-400 rounded-lg px-3 py-2 text-sm">
+                      {clinicas.find(c => c.id === clinicaIdUsuario)?.nome || '—'}
+                    </div>
+                  )}
                 </div>
               </div>
               <div className="flex gap-2 pt-2">

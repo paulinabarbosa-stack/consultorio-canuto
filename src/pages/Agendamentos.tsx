@@ -27,13 +27,32 @@ export default function Agendamentos() {
   const [filtroStatus, setFiltroStatus] = useState('')
   const [modalAberto, setModalAberto] = useState(false)
   const [salvando, setSalvando] = useState(false)
+  const [clinicaIdUsuario, setClinicaIdUsuario] = useState<string | null>(null)
+  const [perfilAdmin, setPerfilAdmin] = useState(true)
   const [form, setForm] = useState({
     paciente_id: '', dentista_id: '', clinica_id: '',
     procedimento_id: '', data_hora: '', duracao_minutos: 30,
     status: 'agendado', observacoes: ''
   })
 
-  useEffect(() => { carregar() }, [filtroData, filtroClinica, filtroStatus])
+  useEffect(() => {
+    async function carregarUsuario() {
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user) return
+      const { data } = await supabase.from('usuarios').select('perfil, clinica_id').eq('auth_id', user.id).maybeSingle()
+      if (data) {
+        setPerfilAdmin(data.perfil !== 'secretaria')
+        if (data.clinica_id) {
+          setClinicaIdUsuario(data.clinica_id)
+          setFiltroClinica(data.clinica_id)
+          setForm(f => ({ ...f, clinica_id: data.clinica_id }))
+        }
+      }
+    }
+    carregarUsuario()
+  }, [])
+
+  useEffect(() => { if (clinicaIdUsuario !== undefined) carregar() }, [filtroData, filtroClinica, filtroStatus, clinicaIdUsuario])
 
   async function carregar() {
     setLoading(true)
@@ -79,7 +98,7 @@ export default function Agendamentos() {
     }])
     if (error) { alert('Erro: ' + error.message); setSalvando(false); return }
     setModalAberto(false)
-    setForm({ paciente_id: '', dentista_id: '', clinica_id: '', procedimento_id: '', data_hora: '', duracao_minutos: 30, status: 'agendado', observacoes: '' })
+    setForm({ paciente_id: '', dentista_id: '', clinica_id: clinicaIdUsuario || '', procedimento_id: '', data_hora: '', duracao_minutos: 30, status: 'agendado', observacoes: '' })
     await carregar()
     setSalvando(false)
   }
@@ -109,49 +128,45 @@ export default function Agendamentos() {
         </button>
       </div>
 
-      {/* Filtros */}
-      <div className="flex gap-3 mb-6">
+      <div className="flex gap-3 mb-6 flex-wrap">
         <input type="date" value={filtroData} onChange={e => setFiltroData(e.target.value)}
-          className="bg-gray-900 border border-gray-800 text-white rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-verde-600" />
-        <select value={filtroClinica} onChange={e => setFiltroClinica(e.target.value)}
-          className="bg-gray-900 border border-gray-800 text-white rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-verde-600">
-          <option value="">Todas as clínicas</option>
-          {clinicas.map(c => <option key={c.id} value={c.id}>{c.nome}</option>)}
-        </select>
+          className="bg-gray-900 border border-gray-800 text-white rounded-lg px-3 py-2 text-sm focus:outline-none" />
+        {perfilAdmin && (
+          <select value={filtroClinica} onChange={e => setFiltroClinica(e.target.value)}
+            className="bg-gray-900 border border-gray-800 text-white rounded-lg px-3 py-2 text-sm focus:outline-none">
+            <option value="">Todas as clínicas</option>
+            {clinicas.map(c => <option key={c.id} value={c.id}>{c.nome}</option>)}
+          </select>
+        )}
         <select value={filtroStatus} onChange={e => setFiltroStatus(e.target.value)}
-          className="bg-gray-900 border border-gray-800 text-white rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-verde-600">
+          className="bg-gray-900 border border-gray-800 text-white rounded-lg px-3 py-2 text-sm focus:outline-none">
           <option value="">Todos os status</option>
           <option value="agendado">Agendado</option>
           <option value="confirmado">Confirmado</option>
           <option value="cancelado">Cancelado</option>
           <option value="concluido">Concluído</option>
         </select>
-        <button onClick={() => { setFiltroData(''); setFiltroClinica(''); setFiltroStatus('') }}
+        <button onClick={() => { setFiltroData(''); setFiltroStatus(''); if (perfilAdmin) setFiltroClinica('') }}
           className="bg-gray-800 border border-gray-700 text-gray-400 hover:text-white rounded-lg px-3 py-2 text-sm transition-colors">
           Limpar filtros
         </button>
       </div>
 
-      {/* Lista */}
       {loading ? (
         <div className="text-gray-400">Carregando...</div>
       ) : agendamentos.length === 0 ? (
         <div className="bg-gray-900 border border-gray-800 rounded-xl p-12 text-center">
           <div className="text-4xl mb-3">🗓️</div>
           <div className="text-gray-400 font-medium">Nenhum agendamento encontrado</div>
-          <div className="text-gray-600 text-sm mt-1">Clique em "Novo agendamento" para cadastrar</div>
         </div>
       ) : (
         <div className="bg-gray-900 border border-gray-800 rounded-xl overflow-hidden">
           {agendamentos.map((a, i) => (
             <div key={a.id} className={`flex items-center gap-4 px-4 py-3 ${i < agendamentos.length - 1 ? 'border-b border-gray-800' : ''}`}>
-              {/* Hora */}
               <div className="w-14 text-center flex-shrink-0">
                 <div className="text-white font-bold text-sm">{formatarHora(a.data_hora)}</div>
                 <div className="text-gray-600 text-xs">{a.duracao_minutos}min</div>
               </div>
-
-              {/* Paciente */}
               <div className="w-8 h-8 bg-verde-700 rounded-full flex items-center justify-center text-xs font-bold text-verde-300 flex-shrink-0">
                 {iniciais(a.pacientes?.nome || '?')}
               </div>
@@ -161,17 +176,11 @@ export default function Agendamentos() {
                   {a.procedimentos?.nome && `${a.procedimentos.nome} · `}
                   {a.dentistas?.nome} · {a.clinicas?.nome}
                 </div>
-                {a.pacientes?.telefone && (
-                  <div className="text-gray-600 text-xs">📱 {a.pacientes.telefone}</div>
-                )}
+                {a.pacientes?.telefone && <div className="text-gray-600 text-xs">📱 {a.pacientes.telefone}</div>}
               </div>
-
-              {/* Status */}
               <span className={`text-xs font-semibold px-2.5 py-1 rounded-full ${STATUS_CORES[a.status]}`}>
                 {STATUS_LABELS[a.status]}
               </span>
-
-              {/* Ações */}
               <div className="flex gap-1.5 flex-shrink-0">
                 {a.status === 'agendado' && (
                   <button onClick={() => atualizarStatus(a.id, 'confirmado')}
@@ -202,7 +211,6 @@ export default function Agendamentos() {
         </div>
       )}
 
-      {/* MODAL NOVO AGENDAMENTO */}
       {modalAberto && (
         <div className="fixed inset-0 bg-black/70 z-50 flex items-center justify-center p-4">
           <div className="bg-gray-900 border border-gray-800 rounded-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto">
@@ -215,23 +223,32 @@ export default function Agendamentos() {
                 <div className="col-span-2">
                   <label className="text-gray-400 text-xs block mb-1">Paciente *</label>
                   <select value={form.paciente_id} onChange={e => setForm({...form, paciente_id: e.target.value})}
-                    className="w-full bg-gray-800 border border-gray-700 text-white rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-verde-600">
+                    className="w-full bg-gray-800 border border-gray-700 text-white rounded-lg px-3 py-2 text-sm focus:outline-none">
                     <option value="">Selecione o paciente...</option>
                     {pacientes.map(p => <option key={p.id} value={p.id}>{p.nome}</option>)}
                   </select>
                 </div>
-                <div>
-                  <label className="text-gray-400 text-xs block mb-1">Clínica *</label>
-                  <select value={form.clinica_id} onChange={e => setForm({...form, clinica_id: e.target.value})}
-                    className="w-full bg-gray-800 border border-gray-700 text-white rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-verde-600">
-                    <option value="">Selecione...</option>
-                    {clinicas.map(c => <option key={c.id} value={c.id}>{c.nome}</option>)}
-                  </select>
-                </div>
+                {perfilAdmin ? (
+                  <div>
+                    <label className="text-gray-400 text-xs block mb-1">Clínica *</label>
+                    <select value={form.clinica_id} onChange={e => setForm({...form, clinica_id: e.target.value})}
+                      className="w-full bg-gray-800 border border-gray-700 text-white rounded-lg px-3 py-2 text-sm focus:outline-none">
+                      <option value="">Selecione...</option>
+                      {clinicas.map(c => <option key={c.id} value={c.id}>{c.nome}</option>)}
+                    </select>
+                  </div>
+                ) : (
+                  <div>
+                    <label className="text-gray-400 text-xs block mb-1">Clínica</label>
+                    <div className="bg-gray-800 border border-gray-700 text-gray-400 rounded-lg px-3 py-2 text-sm">
+                      {clinicas.find(c => c.id === clinicaIdUsuario)?.nome || '—'}
+                    </div>
+                  </div>
+                )}
                 <div>
                   <label className="text-gray-400 text-xs block mb-1">Dentista *</label>
                   <select value={form.dentista_id} onChange={e => setForm({...form, dentista_id: e.target.value})}
-                    className="w-full bg-gray-800 border border-gray-700 text-white rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-verde-600">
+                    className="w-full bg-gray-800 border border-gray-700 text-white rounded-lg px-3 py-2 text-sm focus:outline-none">
                     <option value="">Selecione...</option>
                     {dentistas.map(d => <option key={d.id} value={d.id}>{d.nome}</option>)}
                   </select>
@@ -243,7 +260,7 @@ export default function Agendamentos() {
                       const proc = procedimentos.find(p => p.id === e.target.value)
                       setForm({...form, procedimento_id: e.target.value, duracao_minutos: proc?.duracao_minutos || 30})
                     }}
-                    className="w-full bg-gray-800 border border-gray-700 text-white rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-verde-600">
+                    className="w-full bg-gray-800 border border-gray-700 text-white rounded-lg px-3 py-2 text-sm focus:outline-none">
                     <option value="">Selecione o procedimento...</option>
                     {procedimentos.map(p => <option key={p.id} value={p.id}>{p.nome} ({p.duracao_minutos}min)</option>)}
                   </select>
@@ -252,20 +269,20 @@ export default function Agendamentos() {
                   <label className="text-gray-400 text-xs block mb-1">Data e hora *</label>
                   <input type="datetime-local" value={form.data_hora}
                     onChange={e => setForm({...form, data_hora: e.target.value})}
-                    className="w-full bg-gray-800 border border-gray-700 text-white rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-verde-600" />
+                    className="w-full bg-gray-800 border border-gray-700 text-white rounded-lg px-3 py-2 text-sm focus:outline-none" />
                 </div>
                 <div>
                   <label className="text-gray-400 text-xs block mb-1">Duração (minutos)</label>
                   <input type="number" value={form.duracao_minutos}
                     onChange={e => setForm({...form, duracao_minutos: parseInt(e.target.value)})}
-                    className="w-full bg-gray-800 border border-gray-700 text-white rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-verde-600" />
+                    className="w-full bg-gray-800 border border-gray-700 text-white rounded-lg px-3 py-2 text-sm focus:outline-none" />
                 </div>
                 <div className="col-span-2">
                   <label className="text-gray-400 text-xs block mb-1">Observações</label>
                   <input type="text" value={form.observacoes}
                     onChange={e => setForm({...form, observacoes: e.target.value})}
                     placeholder="Anotações sobre o agendamento..."
-                    className="w-full bg-gray-800 border border-gray-700 text-white rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-verde-600" />
+                    className="w-full bg-gray-800 border border-gray-700 text-white rounded-lg px-3 py-2 text-sm focus:outline-none" />
                 </div>
               </div>
               <div className="flex gap-2 pt-2">

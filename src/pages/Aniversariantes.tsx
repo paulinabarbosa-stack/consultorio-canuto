@@ -5,27 +5,33 @@ export default function Aniversariantes() {
   const [pacientes, setPacientes] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [mesSel, setMesSel] = useState(new Date().getMonth() + 1)
+  const [clinicaIdUsuario, setClinicaIdUsuario] = useState<string | null>(null)
 
   const MESES = ['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro']
 
-  useEffect(() => { carregar() }, [mesSel])
+  useEffect(() => {
+    async function carregarUsuario() {
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user) return
+      const { data } = await supabase.from('usuarios').select('perfil, clinica_id').eq('auth_id', user.id).maybeSingle()
+      if (data?.clinica_id) setClinicaIdUsuario(data.clinica_id)
+    }
+    carregarUsuario()
+  }, [])
+
+  useEffect(() => { carregar() }, [mesSel, clinicaIdUsuario])
 
   async function carregar() {
     setLoading(true)
     try {
-      const { data } = await supabase
-        .from('pacientes')
-        .select('*, clinicas(nome), dentistas(nome)')
-        .not('data_nascimento', 'is', null)
+      let query = supabase.from('pacientes').select('*, clinicas(nome), dentistas(nome)').not('data_nascimento', 'is', null)
+      if (clinicaIdUsuario) query = query.eq('clinica_id', clinicaIdUsuario)
+      const { data } = await query
       if (data) {
         const filtrados = data.filter(p => {
           const mes = new Date(p.data_nascimento).getMonth() + 1
           return mes === mesSel
-        }).sort((a, b) => {
-          const diaA = new Date(a.data_nascimento).getDate()
-          const diaB = new Date(b.data_nascimento).getDate()
-          return diaA - diaB
-        })
+        }).sort((a, b) => new Date(a.data_nascimento).getDate() - new Date(b.data_nascimento).getDate())
         setPacientes(filtrados)
       }
     } catch (err) { console.error(err) }
@@ -45,8 +51,7 @@ export default function Aniversariantes() {
     const nasc = new Date(data)
     const aniv = new Date(hoje.getFullYear(), nasc.getMonth(), nasc.getDate())
     if (aniv < hoje) aniv.setFullYear(hoje.getFullYear() + 1)
-    const diff = Math.ceil((aniv.getTime() - hoje.getTime()) / (1000 * 60 * 60 * 24))
-    return diff
+    return Math.ceil((aniv.getTime() - hoje.getTime()) / (1000 * 60 * 60 * 24))
   }
 
   function iniciais(nome: string) {
@@ -65,7 +70,6 @@ export default function Aniversariantes() {
         </div>
       </div>
 
-      {/* Seletor de mês */}
       <div className="flex gap-2 mb-6 flex-wrap">
         {MESES.map((m, i) => (
           <button key={i} onClick={() => setMesSel(i + 1)}
@@ -75,7 +79,6 @@ export default function Aniversariantes() {
         ))}
       </div>
 
-      {/* Mensagem sugerida */}
       <div className="bg-gray-900 border border-gray-800 rounded-xl p-4 mb-6">
         <div className="text-white text-sm font-semibold mb-2">💬 Mensagem sugerida para WhatsApp</div>
         <div className="text-gray-400 text-sm italic leading-relaxed">
@@ -106,17 +109,13 @@ export default function Aniversariantes() {
                   <div className="text-gray-500 text-xs mt-0.5">
                     🎂 Dia {diaNasc} · {calcularIdade(p.data_nascimento)} anos · {p.clinicas?.nome}
                   </div>
-                  {p.telefone && (
-                    <div className="text-gray-600 text-xs">📱 {p.telefone}</div>
-                  )}
+                  {p.telefone && <div className="text-gray-600 text-xs">📱 {p.telefone}</div>}
                 </div>
                 <div className="flex items-center gap-3">
                   {hoje ? (
                     <span className="bg-green-800 text-green-300 text-xs font-bold px-3 py-1 rounded-full">🎉 Hoje!</span>
                   ) : (
-                    <span className="bg-gray-800 text-gray-400 text-xs px-3 py-1 rounded-full">
-                      Em {dias} {dias === 1 ? 'dia' : 'dias'}
-                    </span>
+                    <span className="bg-gray-800 text-gray-400 text-xs px-3 py-1 rounded-full">Em {dias} {dias === 1 ? 'dia' : 'dias'}</span>
                   )}
                   {p.telefone && (
                     <a href={`https://wa.me/55${p.telefone.replace(/\D/g,'')}?text=${encodeURIComponent(msgWhatsApp(p.nome))}`}

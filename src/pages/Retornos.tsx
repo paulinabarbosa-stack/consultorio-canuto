@@ -5,16 +5,31 @@ export default function Retornos() {
   const [pacientes, setPacientes] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [filtroDias, setFiltroDias] = useState(30)
+  const [clinicaIdUsuario, setClinicaIdUsuario] = useState<string | null>(null)
 
-  useEffect(() => { carregar() }, [filtroDias])
+  useEffect(() => {
+    async function carregarUsuario() {
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user) return
+      const { data } = await supabase.from('usuarios').select('perfil, clinica_id').eq('auth_id', user.id).maybeSingle()
+      if (data?.clinica_id) setClinicaIdUsuario(data.clinica_id)
+    }
+    carregarUsuario()
+  }, [])
+
+  useEffect(() => { carregar() }, [filtroDias, clinicaIdUsuario])
 
   async function carregar() {
     setLoading(true)
     try {
-      const { data: ats } = await supabase
+      let query = supabase
         .from('atendimentos')
-        .select('paciente_id, data_atendimento, pacientes(id, nome, telefone, clinicas(nome), dentistas(nome))')
+        .select('paciente_id, clinica_id, data_atendimento, pacientes(id, nome, telefone, clinicas(nome), dentistas(nome))')
         .order('data_atendimento', { ascending: false })
+
+      if (clinicaIdUsuario) query = query.eq('clinica_id', clinicaIdUsuario)
+
+      const { data: ats } = await query
 
       if (ats) {
         const hoje = new Date()
@@ -58,7 +73,6 @@ export default function Retornos() {
         </div>
       </div>
 
-      {/* Filtro */}
       <div className="flex gap-2 mb-6">
         {[30, 45, 60, 90].map(d => (
           <button key={d} onClick={() => setFiltroDias(d)}
@@ -68,7 +82,6 @@ export default function Retornos() {
         ))}
       </div>
 
-      {/* Mensagem sugerida */}
       <div className="bg-gray-900 border border-gray-800 rounded-xl p-4 mb-6">
         <div className="text-white text-sm font-semibold mb-2">💬 Mensagem sugerida</div>
         <div className="text-gray-400 text-sm italic leading-relaxed">
@@ -82,7 +95,6 @@ export default function Retornos() {
         <div className="bg-gray-900 border border-gray-800 rounded-xl p-12 text-center">
           <div className="text-4xl mb-3">✅</div>
           <div className="text-gray-400 font-medium">Nenhum paciente em atraso!</div>
-          <div className="text-gray-600 text-sm mt-1">Todos os pacientes consultaram nos últimos {filtroDias} dias</div>
         </div>
       ) : (
         <div className="bg-gray-900 border border-gray-800 rounded-xl overflow-hidden">
@@ -97,7 +109,6 @@ export default function Retornos() {
                   <div className="text-white font-semibold text-sm">{p.nome}</div>
                   <div className="text-gray-500 text-xs mt-0.5">
                     Última visita: {new Date(p.ultima_visita).toLocaleDateString('pt-BR')} · {p.clinicas?.nome}
-                    {p.dentistas?.nome && ` · ${p.dentistas.nome}`}
                   </div>
                   {p.telefone && <div className="text-gray-600 text-xs">📱 {p.telefone}</div>}
                 </div>
