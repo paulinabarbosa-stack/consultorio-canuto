@@ -7,7 +7,24 @@ export default function Dashboard() {
 
   useEffect(() => {
     async function carregar() {
-      const { data } = await supabase.from('clinicas').select('*')
+      // Busca o perfil do usuário logado
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user) return
+
+      const { data: usuario } = await supabase
+        .from('usuarios')
+        .select('perfil, clinica_id')
+        .eq('auth_id', user.id)
+        .maybeSingle()
+
+      let query = supabase.from('clinicas').select('*').order('nome')
+
+      // Se for secretária, filtra apenas a clínica dela
+      if (usuario?.perfil === 'secretaria' && usuario?.clinica_id) {
+        query = query.eq('id', usuario.clinica_id)
+      }
+
+      const { data } = await query
       if (data) setClinicas(data)
       setLoading(false)
     }
@@ -23,7 +40,7 @@ export default function Dashboard() {
         <div className="bg-gray-900 border border-gray-800 rounded-xl p-4">
           <div className="text-gray-400 text-xs mb-2 flex items-center gap-1">📅 Consultas hoje</div>
           <div className="text-blue-400 text-2xl font-bold">0</div>
-          <div className="text-gray-600 text-xs mt-1">nas {clinicas.length} clínicas</div>
+          <div className="text-gray-600 text-xs mt-1">nas {clinicas.length} clínica{clinicas.length !== 1 ? 's' : ''}</div>
         </div>
         <div className="bg-gray-900 border border-gray-800 rounded-xl p-4">
           <div className="text-gray-400 text-xs mb-2 flex items-center gap-1">👥 Pacientes ativos</div>
@@ -47,7 +64,7 @@ export default function Dashboard() {
         <div className="bg-gray-900 border border-gray-800 rounded-xl overflow-hidden">
           <div className="px-4 py-3 border-b border-gray-800 flex items-center justify-between">
             <span className="text-white text-sm font-semibold">🏥 Clínicas</span>
-            <span className="text-gray-500 text-xs">{clinicas.length} unidades</span>
+            <span className="text-gray-500 text-xs">{clinicas.length} unidade{clinicas.length !== 1 ? 's' : ''}</span>
           </div>
           <div>
             {clinicas.map(c => (
