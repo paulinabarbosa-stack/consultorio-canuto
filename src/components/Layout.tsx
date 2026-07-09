@@ -1,4 +1,5 @@
 import { Routes, Route, useNavigate, useLocation } from 'react-router-dom'
+import { useEffect, useState } from 'react'
 import { supabase } from '../lib/supabase'
 import Dashboard from '../pages/Dashboard'
 import Pacientes from '../pages/Pacientes'
@@ -15,32 +16,78 @@ import Agenda from '../pages/Agenda'
 import RelatorioDiario from '../pages/RelatorioDiario'
 import Usuarios from '../pages/Usuarios'
 
-const menus = [
-  { path: '/', label: 'Dashboard', icon: '📊' },
-  { path: '/agenda', label: 'Agenda', icon: '📅' },
-  { path: '/relatorio', label: 'Relatório Diário', icon: '📋' },
-  { path: '/agendamentos', label: 'Agendamentos', icon: '🗓️' },
-  { path: '/atendimentos', label: 'Atendimentos', icon: '🦷' },
-  { path: '/pacientes', label: 'Pacientes / CRM', icon: '👥' },
-  { path: '/aniversariantes', label: 'Aniversariantes', icon: '🎂' },
-  { path: '/retornos', label: 'Retornos', icon: '🔔' },
-  { path: '/financeiro', label: 'Financeiro', icon: '💰' },
-  { path: '/rendimento', label: 'Rendimento', icon: '📈' },
-  { path: '/estoque', label: 'Estoque', icon: '📦' },
-  { path: '/dentistas', label: 'Dentistas', icon: '👨‍⚕️' },
-  { path: '/clinicas', label: 'Clínicas', icon: '🏥' },
-  { path: '/usuarios', label: 'Usuários', icon: '🔐' },
+const SECOES = [
+  {
+    label: 'Principal',
+    perfil: 'todos',
+    itens: [
+      { path: '/', label: 'Dashboard', icon: '📊' },
+      { path: '/agenda', label: 'Agenda', icon: '📅' },
+      { path: '/relatorio', label: 'Relatório Diário', icon: '📋' },
+      { path: '/agendamentos', label: 'Agendamentos', icon: '🗓️' },
+    ]
+  },
+  {
+    label: 'Pacientes',
+    perfil: 'todos',
+    itens: [
+      { path: '/atendimentos', label: 'Atendimentos', icon: '🦷' },
+      { path: '/pacientes', label: 'Pacientes / CRM', icon: '👥' },
+      { path: '/aniversariantes', label: 'Aniversariantes', icon: '🎂' },
+      { path: '/retornos', label: 'Retornos', icon: '🔔' },
+      { path: '/estoque', label: 'Estoque', icon: '📦' },
+    ]
+  },
+  {
+    label: 'Gestão',
+    perfil: 'admin_gerente',
+    itens: [
+      { path: '/financeiro', label: 'Financeiro', icon: '💰' },
+      { path: '/rendimento', label: 'Rendimento', icon: '📈' },
+    ]
+  },
+  {
+    label: 'Administração',
+    perfil: 'admin_gerente',
+    itens: [
+      { path: '/dentistas', label: 'Dentistas', icon: '👨‍⚕️' },
+      { path: '/clinicas', label: 'Clínicas', icon: '🏥' },
+      { path: '/usuarios', label: 'Usuários', icon: '🔐' },
+    ]
+  },
 ]
 
 export default function Layout() {
   const navigate = useNavigate()
   const location = useLocation()
+  const [perfil, setPerfil] = useState<string>('secretaria')
+  const [nomeUsuario, setNomeUsuario] = useState<string>('')
+
+  useEffect(() => {
+    async function carregarPerfil() {
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user) return
+      const { data } = await supabase
+        .from('usuarios')
+        .select('perfil, nome')
+        .eq('auth_id', user.id)
+        .maybeSingle()
+      if (data) {
+        setPerfil(data.perfil)
+        setNomeUsuario(data.nome)
+      }
+    }
+    carregarPerfil()
+  }, [])
 
   async function sair() {
     await supabase.auth.signOut()
   }
 
-  const paginaAtual = menus.find(m => m.path === location.pathname)
+  const isAdmin = perfil === 'administrador' || perfil === 'gerente'
+
+  const todosMenus = SECOES.flatMap(s => s.itens)
+  const paginaAtual = todosMenus.find(m => m.path === location.pathname)
 
   return (
     <div className="min-h-screen bg-gray-950 flex">
@@ -53,37 +100,30 @@ export default function Layout() {
               <div className="text-green-500 text-xs">Thiago Canuto</div>
             </div>
           </div>
+          {nomeUsuario && (
+            <div className="mt-2 text-gray-500 text-xs truncate">
+              👤 {nomeUsuario}
+            </div>
+          )}
         </div>
 
         <nav className="flex-1 p-2 overflow-y-auto">
-          <div className="text-gray-600 text-xs font-bold uppercase tracking-wider px-2 py-2">Principal</div>
-          {menus.slice(0, 4).map(m => (
-            <button key={m.path} onClick={() => navigate(m.path)}
-              className={`w-full flex items-center gap-2 px-3 py-2 rounded-lg text-sm mb-0.5 transition-colors ${location.pathname === m.path ? 'bg-green-900 text-green-300' : 'text-gray-400 hover:bg-gray-800 hover:text-white'}`}>
-              <span>{m.icon}</span><span>{m.label}</span>
-            </button>
-          ))}
-          <div className="text-gray-600 text-xs font-bold uppercase tracking-wider px-2 py-2 mt-2">Pacientes</div>
-          {menus.slice(4, 7).map(m => (
-            <button key={m.path} onClick={() => navigate(m.path)}
-              className={`w-full flex items-center gap-2 px-3 py-2 rounded-lg text-sm mb-0.5 transition-colors ${location.pathname === m.path ? 'bg-green-900 text-green-300' : 'text-gray-400 hover:bg-gray-800 hover:text-white'}`}>
-              <span>{m.icon}</span><span>{m.label}</span>
-            </button>
-          ))}
-          <div className="text-gray-600 text-xs font-bold uppercase tracking-wider px-2 py-2 mt-2">Gestão</div>
-          {menus.slice(7, 10).map(m => (
-            <button key={m.path} onClick={() => navigate(m.path)}
-              className={`w-full flex items-center gap-2 px-3 py-2 rounded-lg text-sm mb-0.5 transition-colors ${location.pathname === m.path ? 'bg-green-900 text-green-300' : 'text-gray-400 hover:bg-gray-800 hover:text-white'}`}>
-              <span>{m.icon}</span><span>{m.label}</span>
-            </button>
-          ))}
-          <div className="text-gray-600 text-xs font-bold uppercase tracking-wider px-2 py-2 mt-2">Administração</div>
-          {menus.slice(10).map(m => (
-            <button key={m.path} onClick={() => navigate(m.path)}
-              className={`w-full flex items-center gap-2 px-3 py-2 rounded-lg text-sm mb-0.5 transition-colors ${location.pathname === m.path ? 'bg-green-900 text-green-300' : 'text-gray-400 hover:bg-gray-800 hover:text-white'}`}>
-              <span>{m.icon}</span><span>{m.label}</span>
-            </button>
-          ))}
+          {SECOES.map(secao => {
+            if (secao.perfil === 'admin_gerente' && !isAdmin) return null
+            return (
+              <div key={secao.label}>
+                <div className="text-gray-600 text-xs font-bold uppercase tracking-wider px-2 py-2 mt-2">
+                  {secao.label}
+                </div>
+                {secao.itens.map(m => (
+                  <button key={m.path} onClick={() => navigate(m.path)}
+                    className={`w-full flex items-center gap-2 px-3 py-2 rounded-lg text-sm mb-0.5 transition-colors ${location.pathname === m.path ? 'bg-green-900 text-green-300' : 'text-gray-400 hover:bg-gray-800 hover:text-white'}`}>
+                    <span>{m.icon}</span><span>{m.label}</span>
+                  </button>
+                ))}
+              </div>
+            )
+          })}
         </nav>
 
         <div className="p-3 border-t border-gray-800">
