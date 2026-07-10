@@ -37,6 +37,7 @@ const SECOES = [
       { path: '/retornos', label: 'Retornos', icon: '🔔' },
       { path: '/estoque', label: 'Estoque', icon: '📦' },
       { path: '/financeiro', label: 'Financeiro', icon: '💰' },
+      { path: '/dentistas', label: 'Dentistas', icon: '👨‍⚕️' },
     ]
   },
   {
@@ -50,7 +51,6 @@ const SECOES = [
     label: 'Administração',
     perfil: 'admin_gerente',
     itens: [
-      { path: '/dentistas', label: 'Dentistas', icon: '👨‍⚕️' },
       { path: '/clinicas', label: 'Clínicas', icon: '🏥' },
       { path: '/usuarios', label: 'Usuários', icon: '🔐' },
     ]
