@@ -23,6 +23,24 @@ function getStatusConfig(status: string) {
   return STATUS_TRATAMENTO.find(s => s.value === status) ?? STATUS_TRATAMENTO[0]
 }
 
+// Aplica máscara dd/mm/aaaa enquanto o usuário digita (só números)
+function aplicarMascaraData(valor: string): string {
+  const digitos = valor.replace(/\D/g, '').slice(0, 8)
+  if (digitos.length <= 2) return digitos
+  if (digitos.length <= 4) return `${digitos.slice(0, 2)}/${digitos.slice(2)}`
+  return `${digitos.slice(0, 2)}/${digitos.slice(2, 4)}/${digitos.slice(4)}`
+}
+
+// Converte dd/mm/aaaa (texto digitado) para aaaa-mm-dd (formato do banco). Retorna null se incompleto/inválido.
+function dataParaISO(dataBR: string): string | null {
+  const match = dataBR.match(/^(\d{2})\/(\d{2})\/(\d{4})$/)
+  if (!match) return null
+  const [, dia, mes, ano] = match
+  const diaNum = parseInt(dia), mesNum = parseInt(mes), anoNum = parseInt(ano)
+  if (mesNum < 1 || mesNum > 12 || diaNum < 1 || diaNum > 31 || anoNum < 1900) return null
+  return `${ano}-${mes}-${dia}`
+}
+
 export default function Pacientes() {
   const [pacientes, setPacientes] = useState<any[]>([])
   const [clinicas, setClinicas] = useState<any[]>([])
@@ -115,9 +133,13 @@ export default function Pacientes() {
 
   async function salvarPaciente() {
     if (!form.nome || !form.telefone) return alert('Nome e telefone são obrigatórios!')
+    if (form.data_nascimento && !dataParaISO(form.data_nascimento))
+      return alert('Data de nascimento inválida! Use o formato dd/mm/aaaa.')
     setSalvando(true)
+    const dataNascISO = form.data_nascimento ? dataParaISO(form.data_nascimento) : null
     const { error } = await supabase.from('pacientes').insert([{
-      ...form, clinica_id: form.clinica_id || null, dentista_id: form.dentista_id || null,
+      ...form, data_nascimento: dataNascISO,
+      clinica_id: form.clinica_id || null, dentista_id: form.dentista_id || null,
       status_tratamento: 'em_andamento',
     }])
     if (error) { alert('Erro: ' + error.message); setSalvando(false); return }
@@ -671,8 +693,15 @@ export default function Pacientes() {
                 </div>
                 <div>
                   <label className="text-gray-400 text-xs block mb-1">Data de nascimento</label>
-                  <input type="date" value={form.data_nascimento} onChange={e => setForm({...form, data_nascimento: e.target.value})}
-                    className="w-full bg-gray-800 border border-gray-700 text-white rounded-lg px-3 py-2 text-sm focus:outline-none" />
+                  <input
+                    type="text"
+                    inputMode="numeric"
+                    value={form.data_nascimento}
+                    onChange={e => setForm({...form, data_nascimento: aplicarMascaraData(e.target.value)})}
+                    placeholder="dd/mm/aaaa"
+                    maxLength={10}
+                    className="w-full bg-gray-800 border border-gray-700 text-white rounded-lg px-3 py-2 text-sm focus:outline-none"
+                  />
                 </div>
                 <div>
                   <label className="text-gray-400 text-xs block mb-1">Naturalidade</label>
