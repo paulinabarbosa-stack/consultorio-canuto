@@ -16,6 +16,7 @@ export default function Atendimentos() {
   const [dentistas, setDentistas] = useState<any[]>([])
   const [pacientes, setPacientes] = useState<any[]>([])
   const [procedimentos, setProcedimentos] = useState<any[]>([])
+  const [proteticos, setProteticos] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [modalAberto, setModalAberto] = useState(false)
   const [salvando, setSalvando] = useState(false)
@@ -27,7 +28,8 @@ export default function Atendimentos() {
     paciente_id: '', dentista_id: '', clinica_id: '',
     procedimento_id: '', procedimento_outro: '',
     data_atendimento: new Date().toISOString().split('T')[0],
-    valor: '', forma_pagamento: '', observacoes: ''
+    valor: '', forma_pagamento: '', observacoes: '',
+    envolve_protetico: false, protetico_id: '', protetico_valor: ''
   })
 
   useEffect(() => { carregar() }, [filtroData, filtroClinica, filtroDentista])
@@ -37,7 +39,7 @@ export default function Atendimentos() {
     try {
       let query = supabase
         .from('atendimentos')
-        .select('*, pacientes(nome), dentistas(nome), clinicas(nome), procedimentos(nome)')
+        .select('*, pacientes(nome), dentistas(nome), clinicas(nome), procedimentos(nome), proteticos(nome)')
         .order('created_at', { ascending: false })
 
       if (filtroData) query = query.eq('data_atendimento', filtroData)
@@ -49,12 +51,14 @@ export default function Atendimentos() {
       const { data: de } = await supabase.from('dentistas').select('*')
       const { data: pa } = await supabase.from('pacientes').select('id, nome').order('nome')
       const { data: pr } = await supabase.from('procedimentos').select('*').order('nome')
+      const { data: pt } = await supabase.from('proteticos').select('*').order('nome')
 
       if (at) setAtendimentos(at)
       if (cl) setClinicas(cl)
       if (de) setDentistas(de)
       if (pa) setPacientes(pa)
       if (pr) setProcedimentos(pr)
+      if (pt) setProteticos(pt)
     } catch (e) {
       console.error(e)
     }
@@ -66,10 +70,19 @@ export default function Atendimentos() {
       return alert('Preencha paciente, dentista, clínica, valor e forma de pagamento!')
     if (form.procedimento_id === 'outros' && !form.procedimento_outro.trim())
       return alert('Descreva o procedimento no campo "Qual procedimento?"')
+    if (form.envolve_protetico && (!form.protetico_id || !form.protetico_valor))
+      return alert('Selecione o protético e informe o valor cobrado por ele!')
+
     setSalvando(true)
     const valor = parseFloat(form.valor)
     const pctComissao = (form.forma_pagamento === 'Dinheiro' || form.forma_pagamento === 'Cheque') ? 40 : 36
     const comissaoValor = valor * pctComissao / 100
+
+    // Cálculo do protético
+    const proteticoValor = form.envolve_protetico ? parseFloat(form.protetico_valor) : null
+    const proteticoDescontoDentista = proteticoValor ? proteticoValor * 0.40 : 0
+    const proteticoDescontoClinica = proteticoValor ? proteticoValor * 0.60 : 0
+    const comissaoValorLiquido = comissaoValor - proteticoDescontoDentista
 
     // Se for "Outros", salva sem procedimento_id mas com observação do procedimento
     const procedimentoId = form.procedimento_id === 'outros' ? null : (form.procedimento_id || null)
@@ -87,6 +100,11 @@ export default function Atendimentos() {
       comissao_percentual: pctComissao,
       comissao_valor: comissaoValor,
       observacoes,
+      protetico_id: form.envolve_protetico ? form.protetico_id : null,
+      protetico_valor: proteticoValor,
+      protetico_desconto_dentista: form.envolve_protetico ? proteticoDescontoDentista : null,
+      protetico_desconto_clinica: form.envolve_protetico ? proteticoDescontoClinica : null,
+      comissao_valor_liquido: comissaoValorLiquido,
     }])
     if (error) { alert('Erro: ' + error.message); setSalvando(false); return }
     setModalAberto(false)
@@ -94,7 +112,8 @@ export default function Atendimentos() {
       paciente_id: '', dentista_id: '', clinica_id: '',
       procedimento_id: '', procedimento_outro: '',
       data_atendimento: new Date().toISOString().split('T')[0],
-      valor: '', forma_pagamento: '', observacoes: ''
+      valor: '', forma_pagamento: '', observacoes: '',
+      envolve_protetico: false, protetico_id: '', protetico_valor: ''
     })
     await carregar()
     setSalvando(false)
@@ -114,7 +133,16 @@ export default function Atendimentos() {
   }
 
   const totalReceita = atendimentos.reduce((acc, a) => acc + (parseFloat(a.valor) || 0), 0)
-  const totalComissao = atendimentos.reduce((acc, a) => acc + (parseFloat(a.comissao_valor) || 0), 0)
+  const totalComissao = atendimentos.reduce((acc, a) => acc + (parseFloat(a.comissao_valor_liquido ?? a.comissao_valor) || 0), 0)
+
+  // Valores calculados para exibição no formulário
+  const comissaoBrutaForm = (form.valor && form.forma_pagamento)
+    ? parseFloat(form.valor) * ((form.forma_pagamento === 'Dinheiro' || form.forma_pagamento === 'Cheque') ? 0.40 : 0.36)
+    : 0
+  const proteticoValorForm = form.envolve_protetico ? parseFloat(form.protetico_valor || '0') : 0
+  const proteticoDescontoDentistaForm = proteticoValorForm * 0.40
+  const proteticoDescontoClinicaForm = proteticoValorForm * 0.60
+  const comissaoLiquidaForm = comissaoBrutaForm - proteticoDescontoDentistaForm
 
   return (
     <div>
@@ -195,15 +223,23 @@ export default function Atendimentos() {
               {atendimentos.map((a, i) => (
                 <tr key={a.id} className={i < atendimentos.length - 1 ? 'border-b border-gray-800' : ''}>
                   <td className="px-4 py-3"><div className="text-white text-sm font-medium">{a.pacientes?.nome}</div></td>
-                  <td className="px-4 py-3"><div className="text-gray-400 text-sm">{nomeProcedimento(a)}</div></td>
+                  <td className="px-4 py-3">
+                    <div className="text-gray-400 text-sm">{nomeProcedimento(a)}</div>
+                    {a.proteticos?.nome && (
+                      <div className="text-purple-400 text-xs mt-0.5">🔧 {a.proteticos.nome} · {formatarDinheiro(a.protetico_valor)}</div>
+                    )}
+                  </td>
                   <td className="px-4 py-3"><div className="text-gray-400 text-sm">{a.dentistas?.nome}</div></td>
                   <td className="px-4 py-3"><div className="text-gray-400 text-sm">{a.clinicas?.nome}</div></td>
                   <td className="px-4 py-3 text-right"><div className="text-green-400 text-sm font-semibold">{formatarDinheiro(a.valor)}</div></td>
                   <td className="px-4 py-3 text-right">
                     <div className="text-yellow-400 text-sm">
-                      {formatarDinheiro(a.comissao_valor)}
+                      {formatarDinheiro(a.comissao_valor_liquido ?? a.comissao_valor)}
                       <span className="text-gray-600 text-xs ml-1">({a.comissao_percentual}%)</span>
                     </div>
+                    {a.protetico_desconto_dentista > 0 && (
+                      <div className="text-gray-600 text-xs">− {formatarDinheiro(a.protetico_desconto_dentista)} protético</div>
+                    )}
                   </td>
                   <td className="px-4 py-3">
                     <span className={`text-xs font-semibold px-2 py-1 rounded-full ${PGTO_CORES[a.forma_pagamento] || 'bg-gray-800 text-gray-400'}`}>
@@ -300,15 +336,71 @@ export default function Atendimentos() {
                     <option>Cheque</option>
                   </select>
                 </div>
+
+                {/* Checkbox protético */}
+                <div className="col-span-2 flex items-center gap-2 pt-1">
+                  <input
+                    type="checkbox"
+                    id="envolve_protetico"
+                    checked={form.envolve_protetico}
+                    onChange={e => setForm({...form, envolve_protetico: e.target.checked, protetico_id: '', protetico_valor: ''})}
+                    className="w-4 h-4"
+                  />
+                  <label htmlFor="envolve_protetico" className="text-gray-300 text-sm cursor-pointer">
+                    Este atendimento envolve protético?
+                  </label>
+                </div>
+
+                {form.envolve_protetico && (
+                  <>
+                    <div>
+                      <label className="text-gray-400 text-xs block mb-1">Protético *</label>
+                      <select value={form.protetico_id} onChange={e => setForm({...form, protetico_id: e.target.value})}
+                        className="w-full bg-gray-800 border border-purple-700 text-white rounded-lg px-3 py-2 text-sm focus:outline-none">
+                        <option value="">Selecione...</option>
+                        {proteticos.map(p => <option key={p.id} value={p.id}>{p.nome}</option>)}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="text-gray-400 text-xs block mb-1">Valor cobrado pelo protético *</label>
+                      <input type="number" step="0.01" placeholder="0,00" value={form.protetico_valor}
+                        onChange={e => setForm({...form, protetico_valor: e.target.value})}
+                        className="w-full bg-gray-800 border border-purple-700 text-white rounded-lg px-3 py-2 text-sm focus:outline-none" />
+                    </div>
+                  </>
+                )}
+
                 {form.forma_pagamento && form.valor && (
-                  <div className="col-span-2 bg-gray-800 rounded-lg p-3 text-sm">
-                    <span className="text-gray-400">Comissão do dentista: </span>
-                    <span className="text-yellow-400 font-semibold">
-                      {(form.forma_pagamento === 'Dinheiro' || form.forma_pagamento === 'Cheque') ? '40%' : '36%'} ={' '}
-                      {(parseFloat(form.valor) * ((form.forma_pagamento === 'Dinheiro' || form.forma_pagamento === 'Cheque') ? 0.40 : 0.36)).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
-                    </span>
+                  <div className="col-span-2 bg-gray-800 rounded-lg p-3 text-sm space-y-1">
+                    <div>
+                      <span className="text-gray-400">Comissão bruta do dentista: </span>
+                      <span className="text-yellow-400 font-semibold">
+                        {(form.forma_pagamento === 'Dinheiro' || form.forma_pagamento === 'Cheque') ? '40%' : '36%'} = {formatarDinheiro(comissaoBrutaForm)}
+                      </span>
+                    </div>
+                    {form.envolve_protetico && proteticoValorForm > 0 && (
+                      <>
+                        <div>
+                          <span className="text-gray-400">Protético cobra: </span>
+                          <span className="text-purple-400 font-semibold">{formatarDinheiro(proteticoValorForm)}</span>
+                        </div>
+                        <div>
+                          <span className="text-gray-400">Clínica paga ao protético (60%): </span>
+                          <span className="text-purple-400">{formatarDinheiro(proteticoDescontoClinicaForm)}</span>
+                        </div>
+                        <div>
+                          <span className="text-gray-400">Desconto na comissão do dentista (40%): </span>
+                          <span className="text-red-400">− {formatarDinheiro(proteticoDescontoDentistaForm)}</span>
+                        </div>
+                        <div className="pt-1 border-t border-gray-700">
+                          <span className="text-gray-300 font-semibold">Comissão líquida do dentista: </span>
+                          <span className="text-green-400 font-bold">{formatarDinheiro(comissaoLiquidaForm)}</span>
+                        </div>
+                      </>
+                    )}
                   </div>
                 )}
+
                 <div className="col-span-2">
                   <label className="text-gray-400 text-xs block mb-1">Observações</label>
                   <input type="text" value={form.observacoes}
