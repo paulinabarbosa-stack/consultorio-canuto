@@ -4,7 +4,7 @@ import { supabase } from '../lib/supabase'
 export default function Retornos() {
   const [pacientes, setPacientes] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
-  const [filtroDias, setFiltroDias] = useState(30)
+  const [filtroDias] = useState(30)
   const [abaAtiva, setAbaAtiva] = useState<'atraso'|'agendados'>('atraso')
   const [clinicaIdUsuario, setClinicaIdUsuario] = useState<string | null>(null)
   const [editandoRetorno, setEditandoRetorno] = useState<string | null>(null)
