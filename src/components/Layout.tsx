@@ -15,6 +15,7 @@ import Clinicas from '../pages/Clinicas'
 import Agenda from '../pages/Agenda'
 import RelatorioDiario from '../pages/RelatorioDiario'
 import Usuarios from '../pages/Usuarios'
+import Implantes from '../pages/Implantes'
 
 const SECOES = [
   {
@@ -33,6 +34,7 @@ const SECOES = [
     itens: [
       { path: '/atendimentos', label: 'Atendimentos', icon: '🦷' },
       { path: '/pacientes', label: 'Pacientes / CRM', icon: '👥' },
+      { path: '/implantes', label: 'Implantes', icon: '🔩' },
       { path: '/aniversariantes', label: 'Aniversariantes', icon: '🎂' },
       { path: '/retornos', label: 'Retornos', icon: '🔔' },
       { path: '/estoque', label: 'Estoque', icon: '📦' },
@@ -85,7 +87,6 @@ export default function Layout() {
   }
 
   const isAdmin = perfil === 'administrador' || perfil === 'gerente'
-
   const todosMenus = SECOES.flatMap(s => s.itens)
   const paginaAtual = todosMenus.find(m => m.path === location.pathname)
 
@@ -101,9 +102,7 @@ export default function Layout() {
             </div>
           </div>
           {nomeUsuario && (
-            <div className="mt-2 text-gray-500 text-xs truncate">
-              👤 {nomeUsuario}
-            </div>
+            <div className="mt-2 text-gray-500 text-xs truncate">👤 {nomeUsuario}</div>
           )}
         </div>
 
@@ -134,7 +133,7 @@ export default function Layout() {
       </div>
 
       <div className="flex-1 flex flex-col overflow-hidden">
-        <div className="bg-gray-900 border-b border-gray-800 px-6 py-3 flex items-center justify-between">
+        <div className="bg-gray-900 border-b border-gray-800 px-6 py-3">
           <h1 className="text-white font-semibold flex items-center gap-2">
             <span>{paginaAtual?.icon}</span>
             <span>{paginaAtual?.label || 'Dashboard'}</span>
@@ -156,6 +155,7 @@ export default function Layout() {
             <Route path="/agenda" element={<Agenda />} />
             <Route path="/relatorio" element={<RelatorioDiario />} />
             <Route path="/usuarios" element={<Usuarios />} />
+            <Route path="/implantes" element={<Implantes />} />
           </Routes>
         </div>
       </div>
