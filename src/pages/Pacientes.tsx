@@ -12,6 +12,17 @@ const FICHA_SAUDE_CAMPOS = [
   { key: 'gestante', label: 'Gestante' },
 ]
 
+const STATUS_TRATAMENTO = [
+  { value: 'em_andamento', label: 'Em andamento', cor: 'bg-blue-900/30 text-blue-400 border-blue-800' },
+  { value: 'quitado', label: 'Quitado', cor: 'bg-green-900/30 text-green-400 border-green-800' },
+  { value: 'concluido', label: 'Concluído', cor: 'bg-gray-800 text-gray-400 border-gray-700' },
+  { value: 'inativo', label: 'Inativo', cor: 'bg-red-900/30 text-red-400 border-red-800' },
+]
+
+function getStatusConfig(status: string) {
+  return STATUS_TRATAMENTO.find(s => s.value === status) ?? STATUS_TRATAMENTO[0]
+}
+
 export default function Pacientes() {
   const [pacientes, setPacientes] = useState<any[]>([])
   const [clinicas, setClinicas] = useState<any[]>([])
@@ -19,6 +30,7 @@ export default function Pacientes() {
   const [procedimentos, setProcedimentos] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [busca, setBusca] = useState('')
+  const [filtroStatus, setFiltroStatus] = useState('')
   const [modalAberto, setModalAberto] = useState(false)
   const [pacienteSelecionado, setPacienteSelecionado] = useState<any>(null)
   const [prontuario, setProntuario] = useState<any[]>([])
@@ -30,6 +42,7 @@ export default function Pacientes() {
   const [fichaSaude, setFichaSaude] = useState<any>({})
   const [fichaObs, setFichaObs] = useState('')
   const [clinicaIdUsuario, setClinicaIdUsuario] = useState<string | null>(null)
+  const [statusTratamento, setStatusTratamento] = useState('em_andamento')
 
   const [form, setForm] = useState({
     nome: '', telefone: '', telefone_fixo: '', email: '', cpf: '', rg: '',
@@ -40,15 +53,8 @@ export default function Pacientes() {
 
   const [formProntuario, setFormProntuario] = useState({
     data_procedimento: new Date().toISOString().split('T')[0],
-    quantidade: 1,
-    tratamento: '',
-    dentista_id: '',
-    valor: '',
-    data_pagamento: '',
-    valor_pago: '',
-    forma_pagamento: '',
-    observacoes: '',
-    orcamento_aprovado: '',
+    quantidade: 1, tratamento: '', dentista_id: '', valor: '',
+    data_pagamento: '', valor_pago: '', forma_pagamento: '', observacoes: '', orcamento_aprovado: '',
   })
 
   useEffect(() => {
@@ -85,11 +91,8 @@ export default function Pacientes() {
     setAbaAtiva('dados')
     setFichaSaude(p.ficha_saude || {})
     setFichaObs(p.ficha_saude?.observacoes || '')
-    const { data } = await supabase
-      .from('prontuario')
-      .select('*, dentistas(nome)')
-      .eq('paciente_id', p.id)
-      .order('data_procedimento', { ascending: true })
+    setStatusTratamento(p.status_tratamento || 'em_andamento')
+    const { data } = await supabase.from('prontuario').select('*, dentistas(nome)').eq('paciente_id', p.id).order('data_procedimento', { ascending: true })
     if (data) setProntuario(data)
     setModalAberto(true)
   }
@@ -103,13 +106,19 @@ export default function Pacientes() {
     alert('Ficha de saúde salva!')
   }
 
+  async function salvarStatusTratamento(novoStatus: string) {
+    setStatusTratamento(novoStatus)
+    await supabase.from('pacientes').update({ status_tratamento: novoStatus }).eq('id', pacienteSelecionado.id)
+    setPacienteSelecionado({ ...pacienteSelecionado, status_tratamento: novoStatus })
+    setPacientes(prev => prev.map(p => p.id === pacienteSelecionado.id ? { ...p, status_tratamento: novoStatus } : p))
+  }
+
   async function salvarPaciente() {
     if (!form.nome || !form.telefone) return alert('Nome e telefone são obrigatórios!')
     setSalvando(true)
     const { error } = await supabase.from('pacientes').insert([{
-      ...form,
-      clinica_id: form.clinica_id || null,
-      dentista_id: form.dentista_id || null,
+      ...form, clinica_id: form.clinica_id || null, dentista_id: form.dentista_id || null,
+      status_tratamento: 'em_andamento',
     }])
     if (error) { alert('Erro: ' + error.message); setSalvando(false); return }
     setNovoModalAberto(false)
@@ -124,8 +133,6 @@ export default function Pacientes() {
     const valorTotal = parseFloat(formProntuario.valor) || 0
     const valorPago = parseFloat(formProntuario.valor_pago) || 0
     const deve = valorTotal - valorPago
-
-    // Calcula soma acumulada corretamente (ordenado por data asc)
     const prontuarioOrdenado = [...prontuario].sort((a, b) => new Date(a.data_procedimento).getTime() - new Date(b.data_procedimento).getTime())
     const ultimoRegistro = prontuarioOrdenado[prontuarioOrdenado.length - 1]
     const somaAnterior = ultimoRegistro ? parseFloat(ultimoRegistro.soma_acumulada) || 0 : 0
@@ -138,11 +145,9 @@ export default function Pacientes() {
       data_procedimento: formProntuario.data_procedimento,
       quantidade: formProntuario.quantidade,
       tratamento: formProntuario.tratamento,
-      valor: valorTotal,
-      soma_acumulada: somaAcumulada,
+      valor: valorTotal, soma_acumulada: somaAcumulada,
       data_pagamento: formProntuario.data_pagamento || null,
-      valor_pago: valorPago,
-      deve: deve,
+      valor_pago: valorPago, deve,
       forma_pagamento: formProntuario.forma_pagamento || null,
       observacoes: formProntuario.observacoes || null,
     }])
@@ -156,8 +161,7 @@ export default function Pacientes() {
 
   function calcularIdade(dataNasc: string) {
     if (!dataNasc) return null
-    const hoje = new Date()
-    const nasc = new Date(dataNasc)
+    const hoje = new Date(); const nasc = new Date(dataNasc)
     let idade = hoje.getFullYear() - nasc.getFullYear()
     const m = hoje.getMonth() - nasc.getMonth()
     if (m < 0 || (m === 0 && hoje.getDate() < nasc.getDate())) idade--
@@ -172,24 +176,30 @@ export default function Pacientes() {
     return (v || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
   }
 
-  const pacientesFiltrados = pacientes.filter(p =>
-    p.nome.toLowerCase().includes(busca.toLowerCase()) ||
-    (p.telefone && p.telefone.includes(busca)) ||
-    (p.clinicas?.nome && p.clinicas.nome.toLowerCase().includes(busca.toLowerCase()))
-  )
+  const pacientesFiltrados = pacientes.filter(p => {
+    const buscaOk = p.nome.toLowerCase().includes(busca.toLowerCase()) ||
+      (p.telefone && p.telefone.includes(busca)) ||
+      (p.clinicas?.nome && p.clinicas.nome.toLowerCase().includes(busca.toLowerCase()))
+    const statusOk = !filtroStatus || (p.status_tratamento || 'em_andamento') === filtroStatus
+    return buscaOk && statusOk
+  })
 
   const totalDeve = prontuario.reduce((acc, r) => acc + (parseFloat(r.deve) || 0), 0)
   const totalPago = prontuario.reduce((acc, r) => acc + (parseFloat(r.valor_pago) || 0), 0)
   const totalGasto = prontuario.reduce((acc, r) => acc + (parseFloat(r.valor) || 0), 0)
+  const alertasSaude = FICHA_SAUDE_CAMPOS.filter(c => fichaSaude[c.key] === true).map(c => c.label)
 
-  // Soma acumulada real (recalculada em ordem)
   let somaAcum = 0
   const prontuarioComSoma = prontuario.map(r => {
     somaAcum += parseFloat(r.deve) || 0
     return { ...r, soma_calculada: somaAcum }
   })
 
-  const alertasSaude = FICHA_SAUDE_CAMPOS.filter(c => fichaSaude[c.key] === true).map(c => c.label)
+  // Contagem por status
+  const contagemStatus = STATUS_TRATAMENTO.map(s => ({
+    ...s,
+    qtd: pacientes.filter(p => (p.status_tratamento || 'em_andamento') === s.value).length
+  }))
 
   if (loading) return <div className="text-gray-400">Carregando...</div>
 
@@ -198,7 +208,7 @@ export default function Pacientes() {
       <div className="flex items-center justify-between mb-6">
         <div>
           <h2 className="text-white text-lg font-bold">Pacientes / CRM</h2>
-          <p className="text-gray-500 text-sm">{pacientes.length} pacientes cadastrados</p>
+          <p className="text-gray-500 text-sm">{pacientes.length} pacientes · {pacientesFiltrados.length} exibidos</p>
         </div>
         <button onClick={() => setNovoModalAberto(true)}
           className="bg-verde-600 hover:bg-verde-500 text-white px-4 py-2 rounded-lg text-sm font-semibold transition-colors">
@@ -206,20 +216,42 @@ export default function Pacientes() {
         </button>
       </div>
 
+      {/* Cards de status */}
+      <div className="grid grid-cols-4 gap-3 mb-4">
+        {contagemStatus.map(s => (
+          <button key={s.value}
+            onClick={() => setFiltroStatus(filtroStatus === s.value ? '' : s.value)}
+            className={`rounded-xl border p-3 text-center transition-colors ${filtroStatus === s.value ? s.cor + ' ring-2 ring-offset-1 ring-offset-gray-950' : 'bg-gray-900 border-gray-800 hover:border-gray-700'}`}>
+            <div className={`text-2xl font-bold ${filtroStatus === s.value ? '' : 'text-white'}`}>{s.qtd}</div>
+            <div className={`text-xs font-medium ${filtroStatus === s.value ? '' : 'text-gray-500'}`}>{s.label}</div>
+          </button>
+        ))}
+      </div>
+
       <input type="text" placeholder="🔍  Buscar por nome, telefone ou clínica..."
         value={busca} onChange={e => setBusca(e.target.value)}
         className="w-full bg-gray-900 border border-gray-800 text-white rounded-xl px-4 py-3 text-sm mb-4 focus:outline-none focus:border-verde-600" />
+
+      {filtroStatus && (
+        <div className="flex items-center gap-2 mb-3">
+          <span className="text-gray-400 text-xs">Filtrando por:</span>
+          <span className={`text-xs px-2 py-0.5 rounded border font-medium ${getStatusConfig(filtroStatus).cor}`}>
+            {getStatusConfig(filtroStatus).label}
+          </span>
+          <button onClick={() => setFiltroStatus('')} className="text-gray-500 hover:text-white text-xs">× limpar</button>
+        </div>
+      )}
 
       {pacientesFiltrados.length === 0 ? (
         <div className="bg-gray-900 border border-gray-800 rounded-xl p-12 text-center">
           <div className="text-4xl mb-3">👥</div>
           <div className="text-gray-400 font-medium">Nenhum paciente encontrado</div>
-          <div className="text-gray-600 text-sm mt-1">Clique em "Novo paciente" para cadastrar</div>
         </div>
       ) : (
         <div className="grid grid-cols-2 gap-3">
           {pacientesFiltrados.map(p => {
             const alertas = FICHA_SAUDE_CAMPOS.filter(c => p.ficha_saude?.[c.key] === true)
+            const stConfig = getStatusConfig(p.status_tratamento || 'em_andamento')
             return (
               <div key={p.id} onClick={() => abrirFicha(p)}
                 className="bg-gray-900 border border-gray-800 hover:border-verde-600 rounded-xl p-4 cursor-pointer transition-colors flex items-center gap-3">
@@ -227,7 +259,12 @@ export default function Pacientes() {
                   {iniciais(p.nome)}
                 </div>
                 <div className="flex-1 min-w-0">
-                  <div className="text-white font-semibold text-sm truncate">{p.nome}</div>
+                  <div className="flex items-center gap-2">
+                    <div className="text-white font-semibold text-sm truncate">{p.nome}</div>
+                    <span className={`text-[10px] px-1.5 py-0.5 rounded border font-medium flex-shrink-0 ${stConfig.cor}`}>
+                      {stConfig.label}
+                    </span>
+                  </div>
                   <div className="text-gray-500 text-xs mt-0.5">
                     📱 {p.telefone}
                     {p.data_nascimento && ` · 🎂 ${calcularIdade(p.data_nascimento)} anos`}
@@ -240,7 +277,7 @@ export default function Pacientes() {
                     <div className="text-yellow-500 text-xs mt-0.5">⚠️ {alertas.map(a => a.label).join(', ')}</div>
                   )}
                 </div>
-                <div className="text-verde-500 text-xs font-semibold">Ver ficha →</div>
+                <div className="text-verde-500 text-xs font-semibold flex-shrink-0">Ver ficha →</div>
               </div>
             )
           })}
@@ -257,7 +294,12 @@ export default function Pacientes() {
                   {iniciais(pacienteSelecionado.nome)}
                 </div>
                 <div>
-                  <h3 className="text-white font-bold">{pacienteSelecionado.nome}</h3>
+                  <div className="flex items-center gap-2">
+                    <h3 className="text-white font-bold">{pacienteSelecionado.nome}</h3>
+                    <span className={`text-[10px] px-2 py-0.5 rounded border font-medium ${getStatusConfig(statusTratamento).cor}`}>
+                      {getStatusConfig(statusTratamento).label}
+                    </span>
+                  </div>
                   <p className="text-gray-500 text-xs">
                     {pacienteSelecionado.data_nascimento && `${calcularIdade(pacienteSelecionado.data_nascimento)} anos · `}
                     {pacienteSelecionado.clinicas?.nome}
@@ -267,7 +309,14 @@ export default function Pacientes() {
                   )}
                 </div>
               </div>
-              <button onClick={() => setModalAberto(false)} className="text-gray-500 hover:text-white text-xl">×</button>
+              <div className="flex items-center gap-3">
+                {/* Seletor de status */}
+                <select value={statusTratamento} onChange={e => salvarStatusTratamento(e.target.value)}
+                  className="bg-gray-800 border border-gray-700 text-white rounded-lg px-3 py-1.5 text-xs focus:outline-none">
+                  {STATUS_TRATAMENTO.map(s => <option key={s.value} value={s.value}>{s.label}</option>)}
+                </select>
+                <button onClick={() => setModalAberto(false)} className="text-gray-500 hover:text-white text-xl">×</button>
+              </div>
             </div>
 
             {/* Abas */}
@@ -287,7 +336,6 @@ export default function Pacientes() {
             </div>
 
             <div className="p-5">
-
               {/* ABA DADOS */}
               {abaAtiva === 'dados' && (
                 <div className="space-y-3">
@@ -346,17 +394,14 @@ export default function Pacientes() {
               {/* ABA FICHA DE SAÚDE */}
               {abaAtiva === 'saude' && (
                 <div className="space-y-4">
-                  <p className="text-gray-400 text-sm">Marque as condições de saúde do paciente. Estas informações aparecem como alertas na ficha.</p>
+                  <p className="text-gray-400 text-sm">Marque as condições de saúde do paciente.</p>
                   <div className="grid grid-cols-2 gap-3">
                     {FICHA_SAUDE_CAMPOS.map(campo => (
                       <label key={campo.key}
                         className={`flex items-center gap-3 px-4 py-3 rounded-lg border cursor-pointer transition-colors ${fichaSaude[campo.key] ? 'border-yellow-500 bg-yellow-900/20' : 'border-gray-700 bg-gray-800 hover:border-gray-600'}`}>
-                        <input
-                          type="checkbox"
-                          checked={!!fichaSaude[campo.key]}
+                        <input type="checkbox" checked={!!fichaSaude[campo.key]}
                           onChange={e => setFichaSaude({ ...fichaSaude, [campo.key]: e.target.checked })}
-                          className="accent-yellow-500 w-4 h-4"
-                        />
+                          className="accent-yellow-500 w-4 h-4" />
                         <span className={`text-sm font-medium ${fichaSaude[campo.key] ? 'text-yellow-400' : 'text-gray-300'}`}>
                           {fichaSaude[campo.key] ? '⚠️ ' : ''}{campo.label}
                         </span>
@@ -365,13 +410,9 @@ export default function Pacientes() {
                   </div>
                   <div>
                     <label className="text-gray-400 text-xs block mb-1">Outros / Observações de saúde</label>
-                    <textarea
-                      value={fichaObs}
-                      onChange={e => setFichaObs(e.target.value)}
-                      rows={3}
-                      placeholder="Medicamentos em uso, alergias, outras condições..."
-                      className="w-full bg-gray-800 border border-gray-700 text-white rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-verde-600 resize-none"
-                    />
+                    <textarea value={fichaObs} onChange={e => setFichaObs(e.target.value)}
+                      rows={3} placeholder="Medicamentos em uso, alergias, outras condições..."
+                      className="w-full bg-gray-800 border border-gray-700 text-white rounded-lg px-3 py-2 text-sm focus:outline-none resize-none" />
                   </div>
                   <button onClick={salvarFichaSaude} disabled={salvandoFicha}
                     className="w-full bg-yellow-600 hover:bg-yellow-500 text-white text-sm font-semibold py-2.5 rounded-lg transition-colors disabled:opacity-50">
@@ -383,7 +424,6 @@ export default function Pacientes() {
               {/* ABA PRONTUÁRIO */}
               {abaAtiva === 'prontuario' && (
                 <div>
-                  {/* Resumo financeiro */}
                   <div className="grid grid-cols-3 gap-3 mb-4">
                     <div className="bg-gray-800 rounded-lg p-3 text-center">
                       <div className="text-gray-500 text-xs mb-1">Total tratamentos</div>
@@ -428,26 +468,19 @@ export default function Pacientes() {
                         <tbody>
                           {prontuarioComSoma.map(r => (
                             <tr key={r.id} className="border-b border-gray-800/50 hover:bg-gray-800/30">
-                              <td className="text-gray-400 py-2 px-2 whitespace-nowrap">
-                                {new Date(r.data_procedimento).toLocaleDateString('pt-BR')}
-                              </td>
+                              <td className="text-gray-400 py-2 px-2 whitespace-nowrap">{new Date(r.data_procedimento).toLocaleDateString('pt-BR')}</td>
                               <td className="text-gray-400 py-2 px-2 text-center">{r.quantidade}</td>
                               <td className="text-white py-2 px-2 font-medium">{r.tratamento}</td>
                               <td className="text-gray-400 py-2 px-2 whitespace-nowrap">{r.dentistas?.nome?.split(' ')[0] || '—'}</td>
                               <td className="text-white py-2 px-2 text-right whitespace-nowrap">{fmt(r.valor)}</td>
                               <td className="text-gray-400 py-2 px-2 text-right whitespace-nowrap">{fmt(r.soma_calculada)}</td>
-                              <td className="text-gray-400 py-2 px-2 text-right whitespace-nowrap">
-                                {r.data_pagamento ? new Date(r.data_pagamento).toLocaleDateString('pt-BR') : '—'}
-                              </td>
+                              <td className="text-gray-400 py-2 px-2 text-right whitespace-nowrap">{r.data_pagamento ? new Date(r.data_pagamento).toLocaleDateString('pt-BR') : '—'}</td>
                               <td className="text-verde-400 py-2 px-2 text-right whitespace-nowrap">{fmt(r.valor_pago)}</td>
-                              <td className={`py-2 px-2 text-right whitespace-nowrap font-semibold ${r.deve > 0 ? 'text-red-400' : 'text-verde-400'}`}>
-                                {fmt(r.deve)}
-                              </td>
+                              <td className={`py-2 px-2 text-right whitespace-nowrap font-semibold ${r.deve > 0 ? 'text-red-400' : 'text-verde-400'}`}>{fmt(r.deve)}</td>
                               <td className="py-2 px-2 text-center">
                                 {r.deve <= 0
                                   ? <span className="bg-verde-900/40 text-verde-400 text-xs px-2 py-0.5 rounded-full">✅ Quitado</span>
-                                  : <span className="bg-red-900/40 text-red-400 text-xs px-2 py-0.5 rounded-full">🔴 Deve</span>
-                                }
+                                  : <span className="bg-red-900/40 text-red-400 text-xs px-2 py-0.5 rounded-full">🔴 Deve</span>}
                               </td>
                             </tr>
                           ))}
@@ -456,8 +489,7 @@ export default function Pacientes() {
                           <tr className="border-t-2 border-gray-700 bg-gray-800/50">
                             <td colSpan={4} className="py-2 px-2 text-gray-400 font-bold">TOTAIS</td>
                             <td className="py-2 px-2 text-right text-white font-bold">{fmt(totalGasto)}</td>
-                            <td className="py-2 px-2"></td>
-                            <td className="py-2 px-2"></td>
+                            <td className="py-2 px-2"></td><td className="py-2 px-2"></td>
                             <td className="py-2 px-2 text-right text-verde-400 font-bold">{fmt(totalPago)}</td>
                             <td className={`py-2 px-2 text-right font-bold ${totalDeve > 0 ? 'text-red-400' : 'text-verde-400'}`}>{fmt(totalDeve)}</td>
                             <td className="py-2 px-2"></td>
@@ -540,12 +572,9 @@ export default function Pacientes() {
                     onChange={e => setFormProntuario({...formProntuario, forma_pagamento: e.target.value})}
                     className="w-full bg-gray-800 border border-gray-700 text-white rounded-lg px-3 py-2 text-sm focus:outline-none">
                     <option value="">Selecione...</option>
-                    <option>Pix</option>
-                    <option>Dinheiro</option>
-                    <option>Cartão de débito</option>
-                    <option>Cartão de crédito</option>
-                    <option>Promissória</option>
-                    <option>Cheque</option>
+                    <option>Pix</option><option>Dinheiro</option>
+                    <option>Cartão de débito</option><option>Cartão de crédito</option>
+                    <option>Promissória</option><option>Cheque</option>
                   </select>
                 </div>
                 <div>
@@ -570,11 +599,9 @@ export default function Pacientes() {
               </div>
               <div className="flex gap-2 pt-2">
                 <button onClick={() => setNovoProntuarioAberto(false)}
-                  className="flex-1 bg-gray-800 hover:bg-gray-700 text-white text-sm font-semibold py-2.5 rounded-lg transition-colors">
-                  Cancelar
-                </button>
+                  className="flex-1 bg-gray-800 hover:bg-gray-700 text-white text-sm font-semibold py-2.5 rounded-lg">Cancelar</button>
                 <button onClick={salvarProntuario} disabled={salvando}
-                  className="flex-1 bg-verde-600 hover:bg-verde-500 text-white text-sm font-semibold py-2.5 rounded-lg transition-colors disabled:opacity-50">
+                  className="flex-1 bg-verde-600 hover:bg-verde-500 text-white text-sm font-semibold py-2.5 rounded-lg disabled:opacity-50">
                   {salvando ? 'Salvando...' : 'Salvar'}
                 </button>
               </div>
@@ -596,84 +623,72 @@ export default function Pacientes() {
                 <div className="col-span-2">
                   <label className="text-gray-400 text-xs block mb-1">Nome completo *</label>
                   <input value={form.nome} onChange={e => setForm({...form, nome: e.target.value})}
-                    className="w-full bg-gray-800 border border-gray-700 text-white rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-verde-600"
-                    placeholder="Nome do paciente" />
+                    className="w-full bg-gray-800 border border-gray-700 text-white rounded-lg px-3 py-2 text-sm focus:outline-none" placeholder="Nome do paciente" />
                 </div>
                 <div>
                   <label className="text-gray-400 text-xs block mb-1">Celular *</label>
                   <input value={form.telefone} onChange={e => setForm({...form, telefone: e.target.value})}
-                    className="w-full bg-gray-800 border border-gray-700 text-white rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-verde-600"
-                    placeholder="(38) 99999-9999" />
+                    className="w-full bg-gray-800 border border-gray-700 text-white rounded-lg px-3 py-2 text-sm focus:outline-none" placeholder="(38) 99999-9999" />
                 </div>
                 <div>
                   <label className="text-gray-400 text-xs block mb-1">Telefone fixo</label>
                   <input value={form.telefone_fixo} onChange={e => setForm({...form, telefone_fixo: e.target.value})}
-                    className="w-full bg-gray-800 border border-gray-700 text-white rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-verde-600"
-                    placeholder="(38) 3333-3333" />
+                    className="w-full bg-gray-800 border border-gray-700 text-white rounded-lg px-3 py-2 text-sm focus:outline-none" placeholder="(38) 3333-3333" />
                 </div>
                 <div>
                   <label className="text-gray-400 text-xs block mb-1">E-mail</label>
                   <input value={form.email} onChange={e => setForm({...form, email: e.target.value})}
-                    className="w-full bg-gray-800 border border-gray-700 text-white rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-verde-600"
-                    placeholder="email@exemplo.com" />
+                    className="w-full bg-gray-800 border border-gray-700 text-white rounded-lg px-3 py-2 text-sm focus:outline-none" placeholder="email@exemplo.com" />
                 </div>
                 <div>
                   <label className="text-gray-400 text-xs block mb-1">CPF</label>
                   <input value={form.cpf} onChange={e => setForm({...form, cpf: e.target.value})}
-                    className="w-full bg-gray-800 border border-gray-700 text-white rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-verde-600"
-                    placeholder="000.000.000-00" />
+                    className="w-full bg-gray-800 border border-gray-700 text-white rounded-lg px-3 py-2 text-sm focus:outline-none" placeholder="000.000.000-00" />
                 </div>
                 <div>
                   <label className="text-gray-400 text-xs block mb-1">RG</label>
                   <input value={form.rg} onChange={e => setForm({...form, rg: e.target.value})}
-                    className="w-full bg-gray-800 border border-gray-700 text-white rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-verde-600"
-                    placeholder="MG-0000000" />
+                    className="w-full bg-gray-800 border border-gray-700 text-white rounded-lg px-3 py-2 text-sm focus:outline-none" placeholder="MG-0000000" />
                 </div>
                 <div>
                   <label className="text-gray-400 text-xs block mb-1">Data de nascimento</label>
                   <input type="date" value={form.data_nascimento} onChange={e => setForm({...form, data_nascimento: e.target.value})}
-                    className="w-full bg-gray-800 border border-gray-700 text-white rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-verde-600" />
+                    className="w-full bg-gray-800 border border-gray-700 text-white rounded-lg px-3 py-2 text-sm focus:outline-none" />
                 </div>
                 <div>
                   <label className="text-gray-400 text-xs block mb-1">Naturalidade</label>
                   <input value={form.naturalidade} onChange={e => setForm({...form, naturalidade: e.target.value})}
-                    className="w-full bg-gray-800 border border-gray-700 text-white rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-verde-600"
-                    placeholder="Cidade/UF" />
+                    className="w-full bg-gray-800 border border-gray-700 text-white rounded-lg px-3 py-2 text-sm focus:outline-none" placeholder="Cidade/UF" />
                 </div>
                 <div>
                   <label className="text-gray-400 text-xs block mb-1">Bairro</label>
                   <input value={form.bairro} onChange={e => setForm({...form, bairro: e.target.value})}
-                    className="w-full bg-gray-800 border border-gray-700 text-white rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-verde-600"
-                    placeholder="Bairro" />
+                    className="w-full bg-gray-800 border border-gray-700 text-white rounded-lg px-3 py-2 text-sm focus:outline-none" placeholder="Bairro" />
                 </div>
                 <div>
                   <label className="text-gray-400 text-xs block mb-1">Cidade</label>
                   <input value={form.cidade} onChange={e => setForm({...form, cidade: e.target.value})}
-                    className="w-full bg-gray-800 border border-gray-700 text-white rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-verde-600"
-                    placeholder="Diamantina" />
+                    className="w-full bg-gray-800 border border-gray-700 text-white rounded-lg px-3 py-2 text-sm focus:outline-none" placeholder="Diamantina" />
                 </div>
                 <div className="col-span-2">
                   <label className="text-gray-400 text-xs block mb-1">Endereço</label>
                   <input value={form.endereco} onChange={e => setForm({...form, endereco: e.target.value})}
-                    className="w-full bg-gray-800 border border-gray-700 text-white rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-verde-600"
-                    placeholder="Rua, número" />
+                    className="w-full bg-gray-800 border border-gray-700 text-white rounded-lg px-3 py-2 text-sm focus:outline-none" placeholder="Rua, número" />
                 </div>
                 <div>
                   <label className="text-gray-400 text-xs block mb-1">Filiação — Pai</label>
                   <input value={form.filiacao_pai} onChange={e => setForm({...form, filiacao_pai: e.target.value})}
-                    className="w-full bg-gray-800 border border-gray-700 text-white rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-verde-600"
-                    placeholder="Nome do pai" />
+                    className="w-full bg-gray-800 border border-gray-700 text-white rounded-lg px-3 py-2 text-sm focus:outline-none" placeholder="Nome do pai" />
                 </div>
                 <div>
                   <label className="text-gray-400 text-xs block mb-1">Filiação — Mãe</label>
                   <input value={form.filiacao_mae} onChange={e => setForm({...form, filiacao_mae: e.target.value})}
-                    className="w-full bg-gray-800 border border-gray-700 text-white rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-verde-600"
-                    placeholder="Nome da mãe" />
+                    className="w-full bg-gray-800 border border-gray-700 text-white rounded-lg px-3 py-2 text-sm focus:outline-none" placeholder="Nome da mãe" />
                 </div>
                 <div>
                   <label className="text-gray-400 text-xs block mb-1">Clínica</label>
                   <select value={form.clinica_id} onChange={e => setForm({...form, clinica_id: e.target.value})}
-                    className="w-full bg-gray-800 border border-gray-700 text-white rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-verde-600">
+                    className="w-full bg-gray-800 border border-gray-700 text-white rounded-lg px-3 py-2 text-sm focus:outline-none">
                     <option value="">Selecione...</option>
                     {clinicas.map(c => <option key={c.id} value={c.id}>{c.nome}</option>)}
                   </select>
@@ -681,7 +696,7 @@ export default function Pacientes() {
                 <div>
                   <label className="text-gray-400 text-xs block mb-1">Dentista</label>
                   <select value={form.dentista_id} onChange={e => setForm({...form, dentista_id: e.target.value})}
-                    className="w-full bg-gray-800 border border-gray-700 text-white rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-verde-600">
+                    className="w-full bg-gray-800 border border-gray-700 text-white rounded-lg px-3 py-2 text-sm focus:outline-none">
                     <option value="">Selecione...</option>
                     {dentistas.map(d => <option key={d.id} value={d.id}>{d.nome}</option>)}
                   </select>
@@ -689,17 +704,15 @@ export default function Pacientes() {
                 <div className="col-span-2">
                   <label className="text-gray-400 text-xs block mb-1">Observações clínicas</label>
                   <textarea value={form.observacoes_clinicas} onChange={e => setForm({...form, observacoes_clinicas: e.target.value})}
-                    className="w-full bg-gray-800 border border-gray-700 text-white rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-verde-600 h-20 resize-none"
+                    className="w-full bg-gray-800 border border-gray-700 text-white rounded-lg px-3 py-2 text-sm focus:outline-none h-20 resize-none"
                     placeholder="Alergias, condições especiais..." />
                 </div>
               </div>
               <div className="flex gap-2 pt-2">
                 <button onClick={() => setNovoModalAberto(false)}
-                  className="flex-1 bg-gray-800 hover:bg-gray-700 text-white text-sm font-semibold py-2.5 rounded-lg transition-colors">
-                  Cancelar
-                </button>
+                  className="flex-1 bg-gray-800 hover:bg-gray-700 text-white text-sm font-semibold py-2.5 rounded-lg">Cancelar</button>
                 <button onClick={salvarPaciente} disabled={salvando}
-                  className="flex-1 bg-verde-600 hover:bg-verde-500 text-white text-sm font-semibold py-2.5 rounded-lg transition-colors disabled:opacity-50">
+                  className="flex-1 bg-verde-600 hover:bg-verde-500 text-white text-sm font-semibold py-2.5 rounded-lg disabled:opacity-50">
                   {salvando ? 'Salvando...' : 'Salvar paciente'}
                 </button>
               </div>
