@@ -138,10 +138,12 @@ export default function Pacientes() {
     const somaAnterior = ultimoRegistro ? parseFloat(ultimoRegistro.soma_acumulada) || 0 : 0
     const somaAcumulada = somaAnterior + deve
 
+    const dentistaId = formProntuario.dentista_id || pacienteSelecionado.dentista_id
+
     const { error } = await supabase.from('prontuario').insert([{
       paciente_id: pacienteSelecionado.id,
       clinica_id: pacienteSelecionado.clinica_id,
-      dentista_id: formProntuario.dentista_id || pacienteSelecionado.dentista_id,
+      dentista_id: dentistaId,
       data_procedimento: formProntuario.data_procedimento,
       quantidade: formProntuario.quantidade,
       tratamento: formProntuario.tratamento,
@@ -152,6 +154,23 @@ export default function Pacientes() {
       observacoes: formProntuario.observacoes || null,
     }])
     if (error) { alert('Erro: ' + error.message); setSalvando(false); return }
+
+    // Cria automaticamente o atendimento no financeiro (se tiver valor pago)
+    if (valorPago > 0 && formProntuario.forma_pagamento) {
+      const pctComissao = (formProntuario.forma_pagamento === 'Dinheiro' || formProntuario.forma_pagamento === 'Cheque') ? 40 : 36
+      const comissaoValor = valorPago * pctComissao / 100
+      await supabase.from('atendimentos').insert([{
+        paciente_id: pacienteSelecionado.id,
+        clinica_id: pacienteSelecionado.clinica_id,
+        dentista_id: dentistaId,
+        data_atendimento: formProntuario.data_pagamento || formProntuario.data_procedimento,
+        valor: valorPago,
+        forma_pagamento: formProntuario.forma_pagamento,
+        comissao_percentual: pctComissao,
+        comissao_valor: comissaoValor,
+        observacoes: 'Prontuario: ' + formProntuario.tratamento,
+      }])
+    }
     setNovoProntuarioAberto(false)
     setFormProntuario({ data_procedimento: new Date().toISOString().split('T')[0], quantidade: 1, tratamento: '', dentista_id: '', valor: '', data_pagamento: '', valor_pago: '', forma_pagamento: '', observacoes: '', orcamento_aprovado: '' })
     const { data } = await supabase.from('prontuario').select('*, dentistas(nome)').eq('paciente_id', pacienteSelecionado.id).order('data_procedimento', { ascending: true })
