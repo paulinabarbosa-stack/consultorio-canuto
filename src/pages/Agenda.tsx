@@ -190,8 +190,16 @@ export default function Agenda() {
   const hoje = toISO(new Date());
 
   function agendamentosDaCelula(data: string, hora: string): Agendamento[] {
-    return agendamentos.filter(a => extrairData(a.data_hora) === data && extrairHora(a.data_hora) === hora);
-  }
+  return agendamentos.filter(a => {
+    if (extrairData(a.data_hora) !== data) return false;
+    const horaAg = extrairHora(a.data_hora);
+    const [hAg, mAg] = horaAg.split(':').map(Number);
+    const [hCell, mCell] = hora.split(':').map(Number);
+    const minAg = hAg * 60 + mAg;
+    const minCell = hCell * 60 + mCell;
+    return minAg >= minCell && minAg < minCell + 30;
+  });
+}
 
   function dentistaDisponivel(diaKey: string): boolean {
     if (dentistaSelecionado === "todos") return true;
