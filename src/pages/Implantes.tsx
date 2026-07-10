@@ -168,7 +168,6 @@ export default function Implantes() {
 
   const implantesFiltrados = filtroStatus ? implantes.filter(i => i.status === filtroStatus) : implantes
   const totalValor = implantes.reduce((acc, i) => acc + (parseFloat(i.valor_total) || 0), 0)
-  const totalParcelas = (imp: any) => parcelas.reduce((acc, p) => acc + (parseFloat(p.valor) || 0), 0)
 
   return (
     <div>
@@ -206,10 +205,8 @@ export default function Implantes() {
         </div>
       ) : (
         <div className="space-y-3">
-          {implantesFiltrados.map(imp => {
+          {implantesFiltrados.map((imp) => {
             const st = getStatus(imp.status)
-            const pago = imp.total_pago || 0
-            const restante = (parseFloat(imp.valor_total) || 0) - pago
             return (
               <div key={imp.id}
                 onClick={() => abrirImplante(imp)}
