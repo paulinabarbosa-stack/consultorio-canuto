@@ -68,16 +68,24 @@ function formatWeekRange(monday: Date): string {
   return `${monday.toLocaleDateString("pt-BR", { day: "2-digit", month: "short" })} – ${saturday.toLocaleDateString("pt-BR", { day: "2-digit", month: "short", year: "numeric" })}`;
 }
 
+// Normaliza o timestamp para UTC (adiciona Z se não tiver offset)
+function normalizarData(dataHora: string): Date {
+  if (dataHora.includes('+') || dataHora.includes('Z') || dataHora.endsWith('00')) {
+    return new Date(dataHora);
+  }
+  return new Date(dataHora + 'Z');
+}
+
 // Extrai hora no fuso de São Paulo
 function extrairHora(dataHora: string): string {
-  return new Date(dataHora).toLocaleTimeString('pt-BR', {
+  return normalizarData(dataHora).toLocaleTimeString('pt-BR', {
     hour: '2-digit', minute: '2-digit', timeZone: TZ
   });
 }
 
 // Extrai data no fuso de São Paulo (retorna YYYY-MM-DD)
 function extrairData(dataHora: string): string {
-  return new Date(dataHora).toLocaleDateString('pt-BR', { timeZone: TZ })
+  return normalizarData(dataHora).toLocaleDateString('pt-BR', { timeZone: TZ })
     .split('/').reverse().join('-');
 }
 
