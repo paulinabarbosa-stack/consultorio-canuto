@@ -137,19 +137,21 @@ export default function RelatorioDiario() {
         })));
       }
 
-      // Atendimentos do dia (financeiro real)
-      const { data: ats } = await supabase
+      // Atendimentos do dia (financeiro real) — filtra pela DATA DO PAGAMENTO,
+      // que é o que efetivamente entra no caixa naquele dia
+      const { data: ats, error } = await supabase
         .from("atendimentos")
         .select(`
-          id, dentista_id, valor_total, forma_pagamento,
-          comissao_valor, comissao_percentual, created_at,
+          id, dentista_id, valor, forma_pagamento,
+          comissao_valor, comissao_percentual, comissao_valor_liquido, created_at,
           pacientes(nome), procedimentos(nome), dentistas(nome),
           proteticos(nome), protetico_valor
         `)
         .eq("clinica_id", clinicaId)
-        .gte("created_at", inicio)
-        .lte("created_at", fim)
+        .eq("data_pagamento", data)
         .order("created_at");
+
+      if (error) console.error("Erro ao carregar atendimentos do relatório:", error);
 
       if (ats) {
         setAtendimentos(ats.map((r: any) => ({
@@ -159,9 +161,9 @@ export default function RelatorioDiario() {
           dentista_nome: r.dentistas?.nome ?? "—",
           procedimento_nome: r.procedimentos?.nome ?? "—",
           hora: extrairHora(r.created_at),
-          valor_total: r.valor_total ?? 0,
+          valor_total: r.valor ?? 0,
           forma_pagamento: r.forma_pagamento ?? "—",
-          comissao_valor: r.comissao_valor ?? 0,
+          comissao_valor: r.comissao_valor_liquido ?? r.comissao_valor ?? 0,
           comissao_percentual: r.comissao_percentual ?? 0,
           protetico_nome: r.proteticos?.nome,
           protetico_valor: r.protetico_valor,
