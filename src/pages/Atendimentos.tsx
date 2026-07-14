@@ -28,6 +28,7 @@ export default function Atendimentos() {
     paciente_id: '', dentista_id: '', clinica_id: '',
     procedimento_id: '', procedimento_outro: '',
     data_atendimento: new Date().toISOString().split('T')[0],
+    data_pagamento: new Date().toISOString().split('T')[0],
     valor: '', forma_pagamento: '', observacoes: '',
     envolve_protetico: false, protetico_id: '', protetico_valor: ''
   })
@@ -68,6 +69,8 @@ export default function Atendimentos() {
   async function salvar() {
     if (!form.paciente_id || !form.dentista_id || !form.clinica_id || !form.valor || !form.forma_pagamento)
       return alert('Preencha paciente, dentista, clínica, valor e forma de pagamento!')
+    if (!form.data_pagamento)
+      return alert('Informe a data do pagamento!')
     if (form.procedimento_id === 'outros' && !form.procedimento_outro.trim())
       return alert('Descreva o procedimento no campo "Qual procedimento?"')
     if (form.envolve_protetico && (!form.protetico_id || !form.protetico_valor))
@@ -96,6 +99,7 @@ export default function Atendimentos() {
       clinica_id: form.clinica_id,
       procedimento_id: procedimentoId,
       data_atendimento: form.data_atendimento,
+      data_pagamento: form.data_pagamento,
       valor, forma_pagamento: form.forma_pagamento,
       comissao_percentual: pctComissao,
       comissao_valor: comissaoValor,
@@ -112,6 +116,7 @@ export default function Atendimentos() {
       paciente_id: '', dentista_id: '', clinica_id: '',
       procedimento_id: '', procedimento_outro: '',
       data_atendimento: new Date().toISOString().split('T')[0],
+      data_pagamento: new Date().toISOString().split('T')[0],
       valor: '', forma_pagamento: '', observacoes: '',
       envolve_protetico: false, protetico_id: '', protetico_valor: ''
     })
@@ -312,9 +317,15 @@ export default function Atendimentos() {
                 )}
 
                 <div>
-                  <label className="text-gray-400 text-xs block mb-1">Data *</label>
+                  <label className="text-gray-400 text-xs block mb-1">Data do procedimento *</label>
                   <input type="date" value={form.data_atendimento}
                     onChange={e => setForm({...form, data_atendimento: e.target.value})}
+                    className="w-full bg-gray-800 border border-gray-700 text-white rounded-lg px-3 py-2 text-sm focus:outline-none" />
+                </div>
+                <div>
+                  <label className="text-gray-400 text-xs block mb-1">Data do pagamento *</label>
+                  <input type="date" value={form.data_pagamento}
+                    onChange={e => setForm({...form, data_pagamento: e.target.value})}
                     className="w-full bg-gray-800 border border-gray-700 text-white rounded-lg px-3 py-2 text-sm focus:outline-none" />
                 </div>
                 <div>
