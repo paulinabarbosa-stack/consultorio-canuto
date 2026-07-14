@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useRef } from 'react'
 import { supabase } from '../lib/supabase'
 
 const FICHA_SAUDE_CAMPOS = [
@@ -94,6 +94,7 @@ export default function Pacientes() {
 
   const [editandoProntuarioAberto, setEditandoProntuarioAberto] = useState(false)
   const [tipoTratamentoSelecionado, setTipoTratamentoSelecionado] = useState('')
+  const inputTratamentoOutroRef = useRef<HTMLInputElement>(null)
   const [formProntuarioEdicao, setFormProntuarioEdicao] = useState({
     id: '', data_procedimento: '', quantidade: 1, tratamento: '', dentista_id: '',
     valor: '', data_pagamento: '', valor_pago: '', forma_pagamento: '', observacoes: '',
@@ -839,6 +840,9 @@ export default function Pacientes() {
                       const valor = e.target.value
                       setTipoTratamentoSelecionado(valor)
                       setFormProntuario({...formProntuario, tratamento: valor === '__outro' ? '' : valor})
+                      if (valor === '__outro') {
+                        setTimeout(() => inputTratamentoOutroRef.current?.focus(), 150)
+                      }
                     }}
                     className="w-full bg-gray-800 border border-gray-700 text-white rounded-lg px-3 py-2 text-sm focus:outline-none">
                     <option value="">Selecione o procedimento...</option>
@@ -846,14 +850,12 @@ export default function Pacientes() {
                     <option value="__outro">Outro (digitar)</option>
                   </select>
                 </div>
-                {tipoTratamentoSelecionado === '__outro' && (
-                  <div className="col-span-2">
-                    <label className="text-gray-400 text-xs block mb-1">Descreva o tratamento *</label>
-                    <input type="text" placeholder="Descreva o procedimento..." value={formProntuario.tratamento}
-                      onChange={e => setFormProntuario({...formProntuario, tratamento: e.target.value})}
-                      className="w-full bg-gray-800 border border-yellow-600 text-white rounded-lg px-3 py-2 text-sm focus:outline-none" />
-                  </div>
-                )}
+                <div className={`col-span-2 ${tipoTratamentoSelecionado === '__outro' ? '' : 'hidden'}`}>
+                  <label className="text-gray-400 text-xs block mb-1">Descreva o tratamento *</label>
+                  <input ref={inputTratamentoOutroRef} type="text" placeholder="Descreva o procedimento..." value={formProntuario.tratamento}
+                    onChange={e => setFormProntuario({...formProntuario, tratamento: e.target.value})}
+                    className="w-full bg-gray-800 border border-yellow-600 text-white rounded-lg px-3 py-2 text-sm focus:outline-none" />
+                </div>
                 <div className="col-span-2">
                   <label className="text-gray-400 text-xs block mb-1">Dentista</label>
                   <select value={formProntuario.dentista_id}
