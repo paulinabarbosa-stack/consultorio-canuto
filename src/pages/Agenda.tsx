@@ -89,9 +89,10 @@ function extrairData(dataHora: string): string {
     .split('/').reverse().join('-');
 }
 
+// Almoço agora é só das 12h às 13h — a partir das 13h já libera para agendamentos
 function isAlmoco(hora: string): boolean {
   const h = parseInt(hora.split(":")[0]);
-  return h === 12 || h === 13;
+  return h === 12;
 }
 
 export default function Agenda() {
@@ -316,7 +317,7 @@ export default function Agenda() {
         {Object.entries(STATUS_CONFIG).map(([k, v]) => (
           <span key={k} className={`text-[11px] px-2 py-0.5 rounded border font-medium ${v.cor}`}>{v.label}</span>
         ))}
-        <span className="text-[11px] px-2 py-0.5 rounded border bg-amber-50 text-amber-600 border-amber-200 font-medium">Almoço 12h–14h</span>
+        <span className="text-[11px] px-2 py-0.5 rounded border bg-amber-50 text-amber-600 border-amber-200 font-medium">Almoço 12h–13h</span>
       </div>
 
       {modalAberto && (
