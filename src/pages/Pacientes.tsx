@@ -92,6 +92,12 @@ export default function Pacientes() {
     data_pagamento: '', valor_pago: '', forma_pagamento: '', observacoes: '', orcamento_aprovado: '',
   })
 
+  const [editandoProntuarioAberto, setEditandoProntuarioAberto] = useState(false)
+  const [formProntuarioEdicao, setFormProntuarioEdicao] = useState({
+    id: '', data_procedimento: '', quantidade: 1, tratamento: '', dentista_id: '',
+    valor: '', data_pagamento: '', valor_pago: '', forma_pagamento: '', observacoes: '',
+  })
+
   useEffect(() => {
     async function carregarUsuario() {
       const { data: { user } } = await supabase.auth.getUser()
@@ -276,6 +282,49 @@ export default function Pacientes() {
     }
     setNovoProntuarioAberto(false)
     setFormProntuario({ data_procedimento: new Date().toISOString().split('T')[0], quantidade: 1, tratamento: '', dentista_id: '', valor: '', data_pagamento: '', valor_pago: '', forma_pagamento: '', observacoes: '', orcamento_aprovado: '' })
+    const { data } = await supabase.from('prontuario').select('*, dentistas(nome)').eq('paciente_id', pacienteSelecionado.id).order('data_procedimento', { ascending: true })
+    if (data) setProntuario(data)
+    setSalvando(false)
+  }
+
+  function abrirEdicaoProntuario(r: any) {
+    setFormProntuarioEdicao({
+      id: r.id,
+      data_procedimento: r.data_procedimento || new Date().toISOString().split('T')[0],
+      quantidade: r.quantidade || 1,
+      tratamento: r.tratamento || '',
+      dentista_id: r.dentista_id || '',
+      valor: r.valor != null ? String(r.valor) : '',
+      data_pagamento: r.data_pagamento || '',
+      valor_pago: r.valor_pago != null ? String(r.valor_pago) : '',
+      forma_pagamento: r.forma_pagamento || '',
+      observacoes: r.observacoes || '',
+    })
+    setEditandoProntuarioAberto(true)
+  }
+
+  async function salvarEdicaoProntuario() {
+    if (!formProntuarioEdicao.tratamento || !formProntuarioEdicao.valor) return alert('Tratamento e valor são obrigatórios!')
+    setSalvando(true)
+    const valorTotal = parseFloat(formProntuarioEdicao.valor) || 0
+    const valorPago = parseFloat(formProntuarioEdicao.valor_pago) || 0
+    const deve = valorTotal - valorPago
+
+    const { error } = await supabase.from('prontuario').update({
+      data_procedimento: formProntuarioEdicao.data_procedimento,
+      quantidade: formProntuarioEdicao.quantidade,
+      tratamento: formProntuarioEdicao.tratamento,
+      dentista_id: formProntuarioEdicao.dentista_id || null,
+      valor: valorTotal,
+      data_pagamento: formProntuarioEdicao.data_pagamento || null,
+      valor_pago: valorPago,
+      deve,
+      forma_pagamento: formProntuarioEdicao.forma_pagamento || null,
+      observacoes: formProntuarioEdicao.observacoes || null,
+    }).eq('id', formProntuarioEdicao.id)
+    if (error) { alert('Erro: ' + error.message); setSalvando(false); return }
+
+    setEditandoProntuarioAberto(false)
     const { data } = await supabase.from('prontuario').select('*, dentistas(nome)').eq('paciente_id', pacienteSelecionado.id).order('data_procedimento', { ascending: true })
     if (data) setProntuario(data)
     setSalvando(false)
@@ -709,6 +758,7 @@ export default function Pacientes() {
                             <th className="text-right text-gray-400 py-2 px-2">Pagou</th>
                             <th className="text-right text-gray-400 py-2 px-2">Deve</th>
                             <th className="text-center text-gray-400 py-2 px-2">Status</th>
+                            <th className="text-center text-gray-400 py-2 px-2">Ação</th>
                           </tr>
                         </thead>
                         <tbody>
@@ -728,6 +778,12 @@ export default function Pacientes() {
                                   ? <span className="bg-verde-900/40 text-verde-400 text-xs px-2 py-0.5 rounded-full">✅ Quitado</span>
                                   : <span className="bg-red-900/40 text-red-400 text-xs px-2 py-0.5 rounded-full">🔴 Deve</span>}
                               </td>
+                              <td className="py-2 px-2 text-center">
+                                <button onClick={() => abrirEdicaoProntuario(r)}
+                                  className="text-gray-400 hover:text-white bg-gray-800 hover:bg-gray-700 border border-gray-700 rounded px-2 py-1 text-xs">
+                                  ✏️
+                                </button>
+                              </td>
                             </tr>
                           ))}
                         </tbody>
@@ -738,6 +794,7 @@ export default function Pacientes() {
                             <td className="py-2 px-2"></td><td className="py-2 px-2"></td>
                             <td className="py-2 px-2 text-right text-verde-400 font-bold">{fmt(totalPago)}</td>
                             <td className={`py-2 px-2 text-right font-bold ${totalDeve > 0 ? 'text-red-400' : 'text-verde-400'}`}>{fmt(totalDeve)}</td>
+                            <td className="py-2 px-2"></td>
                             <td className="py-2 px-2"></td>
                           </tr>
                         </tfoot>
@@ -849,6 +906,92 @@ export default function Pacientes() {
                 <button onClick={salvarProntuario} disabled={salvando}
                   className="flex-1 bg-verde-600 hover:bg-verde-500 text-white text-sm font-semibold py-2.5 rounded-lg disabled:opacity-50">
                   {salvando ? 'Salvando...' : 'Salvar'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL EDITAR PRONTUÁRIO */}
+      {editandoProntuarioAberto && (
+        <div className="fixed inset-0 bg-black/80 z-[60] flex items-center justify-center p-4">
+          <div className="bg-gray-900 border border-gray-800 rounded-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between p-5 border-b border-gray-800">
+              <h3 className="text-white font-bold">Editar procedimento</h3>
+              <button onClick={() => setEditandoProntuarioAberto(false)} className="text-gray-500 hover:text-white text-xl">×</button>
+            </div>
+            <div className="p-5 space-y-3">
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-gray-400 text-xs block mb-1">Data *</label>
+                  <input type="date" value={formProntuarioEdicao.data_procedimento}
+                    onChange={e => setFormProntuarioEdicao({...formProntuarioEdicao, data_procedimento: e.target.value})}
+                    className="w-full bg-gray-800 border border-gray-700 text-white rounded-lg px-3 py-2 text-sm focus:outline-none" />
+                </div>
+                <div>
+                  <label className="text-gray-400 text-xs block mb-1">Quantidade</label>
+                  <input type="number" min="1" value={formProntuarioEdicao.quantidade}
+                    onChange={e => setFormProntuarioEdicao({...formProntuarioEdicao, quantidade: parseInt(e.target.value)})}
+                    className="w-full bg-gray-800 border border-gray-700 text-white rounded-lg px-3 py-2 text-sm focus:outline-none" />
+                </div>
+                <div className="col-span-2">
+                  <label className="text-gray-400 text-xs block mb-1">Tratamento *</label>
+                  <input type="text" value={formProntuarioEdicao.tratamento}
+                    onChange={e => setFormProntuarioEdicao({...formProntuarioEdicao, tratamento: e.target.value})}
+                    className="w-full bg-gray-800 border border-gray-700 text-white rounded-lg px-3 py-2 text-sm focus:outline-none" />
+                </div>
+                <div className="col-span-2">
+                  <label className="text-gray-400 text-xs block mb-1">Dentista</label>
+                  <select value={formProntuarioEdicao.dentista_id}
+                    onChange={e => setFormProntuarioEdicao({...formProntuarioEdicao, dentista_id: e.target.value})}
+                    className="w-full bg-gray-800 border border-gray-700 text-white rounded-lg px-3 py-2 text-sm focus:outline-none">
+                    <option value="">Selecione...</option>
+                    {dentistas.map(d => <option key={d.id} value={d.id}>{d.nome}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label className="text-gray-400 text-xs block mb-1">Valor total *</label>
+                  <input type="number" step="0.01" placeholder="0,00" value={formProntuarioEdicao.valor}
+                    onChange={e => setFormProntuarioEdicao({...formProntuarioEdicao, valor: e.target.value})}
+                    className="w-full bg-gray-800 border border-gray-700 text-white rounded-lg px-3 py-2 text-sm focus:outline-none" />
+                </div>
+                <div>
+                  <label className="text-gray-400 text-xs block mb-1">Valor pago</label>
+                  <input type="number" step="0.01" placeholder="0,00" value={formProntuarioEdicao.valor_pago}
+                    onChange={e => setFormProntuarioEdicao({...formProntuarioEdicao, valor_pago: e.target.value})}
+                    className="w-full bg-gray-800 border border-gray-700 text-white rounded-lg px-3 py-2 text-sm focus:outline-none" />
+                </div>
+                <div>
+                  <label className="text-gray-400 text-xs block mb-1">Forma de pagamento</label>
+                  <select value={formProntuarioEdicao.forma_pagamento}
+                    onChange={e => setFormProntuarioEdicao({...formProntuarioEdicao, forma_pagamento: e.target.value})}
+                    className="w-full bg-gray-800 border border-gray-700 text-white rounded-lg px-3 py-2 text-sm focus:outline-none">
+                    <option value="">Selecione...</option>
+                    <option>Pix</option><option>Dinheiro</option>
+                    <option>Cartão de débito</option><option>Cartão de crédito</option>
+                    <option>Promissória</option><option>Cheque</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="text-gray-400 text-xs block mb-1">Data do pagamento</label>
+                  <input type="date" value={formProntuarioEdicao.data_pagamento}
+                    onChange={e => setFormProntuarioEdicao({...formProntuarioEdicao, data_pagamento: e.target.value})}
+                    className="w-full bg-gray-800 border border-gray-700 text-white rounded-lg px-3 py-2 text-sm focus:outline-none" />
+                </div>
+                <div className="col-span-2">
+                  <label className="text-gray-400 text-xs block mb-1">Observações</label>
+                  <input type="text" placeholder="Anotações..." value={formProntuarioEdicao.observacoes}
+                    onChange={e => setFormProntuarioEdicao({...formProntuarioEdicao, observacoes: e.target.value})}
+                    className="w-full bg-gray-800 border border-gray-700 text-white rounded-lg px-3 py-2 text-sm focus:outline-none" />
+                </div>
+              </div>
+              <div className="flex gap-2 pt-2">
+                <button onClick={() => setEditandoProntuarioAberto(false)}
+                  className="flex-1 bg-gray-800 hover:bg-gray-700 text-white text-sm font-semibold py-2.5 rounded-lg">Cancelar</button>
+                <button onClick={salvarEdicaoProntuario} disabled={salvando}
+                  className="flex-1 bg-verde-600 hover:bg-verde-500 text-white text-sm font-semibold py-2.5 rounded-lg disabled:opacity-50">
+                  {salvando ? 'Salvando...' : 'Salvar alterações'}
                 </button>
               </div>
             </div>
