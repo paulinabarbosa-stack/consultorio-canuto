@@ -41,6 +41,14 @@ function dataParaISO(dataBR: string): string | null {
   return `${ano}-${mes}-${dia}`
 }
 
+// Converte aaaa-mm-dd (do banco) para dd/mm/aaaa (exibição no formulário de edição)
+function dataParaBR(dataISO: string): string {
+  if (!dataISO) return ''
+  const [ano, mes, dia] = dataISO.split('-')
+  if (!ano || !mes || !dia) return ''
+  return `${dia}/${mes}/${ano}`
+}
+
 export default function Pacientes() {
   const [pacientes, setPacientes] = useState<any[]>([])
   const [clinicas, setClinicas] = useState<any[]>([])
@@ -61,6 +69,14 @@ export default function Pacientes() {
   const [fichaObs, setFichaObs] = useState('')
   const [clinicaIdUsuario, setClinicaIdUsuario] = useState<string | null>(null)
   const [statusTratamento, setStatusTratamento] = useState('em_andamento')
+  const [editandoDados, setEditandoDados] = useState(false)
+  const [salvandoEdicao, setSalvandoEdicao] = useState(false)
+  const [formEdicao, setFormEdicao] = useState({
+    nome: '', telefone: '', telefone_fixo: '', email: '', cpf: '', rg: '',
+    data_nascimento: '', naturalidade: '', bairro: '', cidade: '',
+    endereco: '', filiacao_pai: '', filiacao_mae: '',
+    clinica_id: '', dentista_id: '', observacoes_clinicas: ''
+  })
 
   const [form, setForm] = useState({
     nome: '', telefone: '', telefone_fixo: '', email: '', cpf: '', rg: '',
@@ -107,12 +123,55 @@ export default function Pacientes() {
   async function abrirFicha(p: any) {
     setPacienteSelecionado(p)
     setAbaAtiva('dados')
+    setEditandoDados(false)
     setFichaSaude(p.ficha_saude || {})
     setFichaObs(p.ficha_saude?.observacoes || '')
     setStatusTratamento(p.status_tratamento || 'em_andamento')
     const { data } = await supabase.from('prontuario').select('*, dentistas(nome)').eq('paciente_id', p.id).order('data_procedimento', { ascending: true })
     if (data) setProntuario(data)
     setModalAberto(true)
+  }
+
+  function iniciarEdicaoDados() {
+    setFormEdicao({
+      nome: pacienteSelecionado.nome || '',
+      telefone: pacienteSelecionado.telefone || '',
+      telefone_fixo: pacienteSelecionado.telefone_fixo || '',
+      email: pacienteSelecionado.email || '',
+      cpf: pacienteSelecionado.cpf || '',
+      rg: pacienteSelecionado.rg || '',
+      data_nascimento: dataParaBR(pacienteSelecionado.data_nascimento || ''),
+      naturalidade: pacienteSelecionado.naturalidade || '',
+      bairro: pacienteSelecionado.bairro || '',
+      cidade: pacienteSelecionado.cidade || '',
+      endereco: pacienteSelecionado.endereco || '',
+      filiacao_pai: pacienteSelecionado.filiacao_pai || '',
+      filiacao_mae: pacienteSelecionado.filiacao_mae || '',
+      clinica_id: pacienteSelecionado.clinica_id || '',
+      dentista_id: pacienteSelecionado.dentista_id || '',
+      observacoes_clinicas: pacienteSelecionado.observacoes_clinicas || '',
+    })
+    setEditandoDados(true)
+  }
+
+  async function salvarEdicaoDados() {
+    if (!formEdicao.nome || !formEdicao.telefone) return alert('Nome e telefone são obrigatórios!')
+    if (formEdicao.data_nascimento && !dataParaISO(formEdicao.data_nascimento))
+      return alert('Data de nascimento inválida! Use o formato dd/mm/aaaa.')
+    setSalvandoEdicao(true)
+    const dataNascISO = formEdicao.data_nascimento ? dataParaISO(formEdicao.data_nascimento) : null
+    const { error } = await supabase.from('pacientes').update({
+      ...formEdicao, data_nascimento: dataNascISO,
+      clinica_id: formEdicao.clinica_id || null, dentista_id: formEdicao.dentista_id || null,
+    }).eq('id', pacienteSelecionado.id)
+    if (error) { alert('Erro: ' + error.message); setSalvandoEdicao(false); return }
+    const clinicaObj = clinicas.find(c => c.id === formEdicao.clinica_id)
+    const dentistaObj = dentistas.find(d => d.id === formEdicao.dentista_id)
+    const atualizado = { ...pacienteSelecionado, ...formEdicao, data_nascimento: dataNascISO, clinicas: clinicaObj ? { nome: clinicaObj.nome } : null, dentistas: dentistaObj ? { nome: dentistaObj.nome } : null }
+    setPacienteSelecionado(atualizado)
+    setPacientes(prev => prev.map(p => p.id === pacienteSelecionado.id ? atualizado : p))
+    setEditandoDados(false)
+    setSalvandoEdicao(false)
   }
 
   async function salvarFichaSaude() {
@@ -378,8 +437,14 @@ export default function Pacientes() {
 
             <div className="p-5">
               {/* ABA DADOS */}
-              {abaAtiva === 'dados' && (
+              {abaAtiva === 'dados' && !editandoDados && (
                 <div className="space-y-3">
+                  <div className="flex justify-end">
+                    <button onClick={iniciarEdicaoDados}
+                      className="bg-gray-800 hover:bg-gray-700 border border-gray-700 text-gray-300 text-xs font-semibold px-3 py-1.5 rounded-lg transition-colors">
+                      ✏️ Editar dados
+                    </button>
+                  </div>
                   <div className="grid grid-cols-3 gap-3">
                     {[
                       { label: 'Celular', value: pacienteSelecionado.telefone },
@@ -429,6 +494,110 @@ export default function Pacientes() {
                     className="w-full bg-green-700 hover:bg-green-600 text-white text-sm font-semibold py-2.5 rounded-lg text-center transition-colors block">
                     💬 Abrir WhatsApp
                   </a>
+                </div>
+              )}
+
+              {/* ABA DADOS — MODO EDIÇÃO */}
+              {abaAtiva === 'dados' && editandoDados && (
+                <div className="space-y-3">
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="col-span-2">
+                      <label className="text-gray-400 text-xs block mb-1">Nome completo *</label>
+                      <input value={formEdicao.nome} onChange={e => setFormEdicao({...formEdicao, nome: e.target.value})}
+                        className="w-full bg-gray-800 border border-gray-700 text-white rounded-lg px-3 py-2 text-sm focus:outline-none" />
+                    </div>
+                    <div>
+                      <label className="text-gray-400 text-xs block mb-1">Celular *</label>
+                      <input value={formEdicao.telefone} onChange={e => setFormEdicao({...formEdicao, telefone: e.target.value})}
+                        className="w-full bg-gray-800 border border-gray-700 text-white rounded-lg px-3 py-2 text-sm focus:outline-none" />
+                    </div>
+                    <div>
+                      <label className="text-gray-400 text-xs block mb-1">Telefone fixo</label>
+                      <input value={formEdicao.telefone_fixo} onChange={e => setFormEdicao({...formEdicao, telefone_fixo: e.target.value})}
+                        className="w-full bg-gray-800 border border-gray-700 text-white rounded-lg px-3 py-2 text-sm focus:outline-none" />
+                    </div>
+                    <div>
+                      <label className="text-gray-400 text-xs block mb-1">E-mail</label>
+                      <input value={formEdicao.email} onChange={e => setFormEdicao({...formEdicao, email: e.target.value})}
+                        className="w-full bg-gray-800 border border-gray-700 text-white rounded-lg px-3 py-2 text-sm focus:outline-none" />
+                    </div>
+                    <div>
+                      <label className="text-gray-400 text-xs block mb-1">CPF</label>
+                      <input value={formEdicao.cpf} onChange={e => setFormEdicao({...formEdicao, cpf: e.target.value})}
+                        className="w-full bg-gray-800 border border-gray-700 text-white rounded-lg px-3 py-2 text-sm focus:outline-none" />
+                    </div>
+                    <div>
+                      <label className="text-gray-400 text-xs block mb-1">RG</label>
+                      <input value={formEdicao.rg} onChange={e => setFormEdicao({...formEdicao, rg: e.target.value})}
+                        className="w-full bg-gray-800 border border-gray-700 text-white rounded-lg px-3 py-2 text-sm focus:outline-none" />
+                    </div>
+                    <div>
+                      <label className="text-gray-400 text-xs block mb-1">Data de nascimento</label>
+                      <input type="text" inputMode="numeric" placeholder="dd/mm/aaaa" maxLength={10}
+                        value={formEdicao.data_nascimento}
+                        onChange={e => setFormEdicao({...formEdicao, data_nascimento: aplicarMascaraData(e.target.value)})}
+                        className="w-full bg-gray-800 border border-gray-700 text-white rounded-lg px-3 py-2 text-sm focus:outline-none" />
+                    </div>
+                    <div>
+                      <label className="text-gray-400 text-xs block mb-1">Naturalidade</label>
+                      <input value={formEdicao.naturalidade} onChange={e => setFormEdicao({...formEdicao, naturalidade: e.target.value})}
+                        className="w-full bg-gray-800 border border-gray-700 text-white rounded-lg px-3 py-2 text-sm focus:outline-none" />
+                    </div>
+                    <div>
+                      <label className="text-gray-400 text-xs block mb-1">Bairro</label>
+                      <input value={formEdicao.bairro} onChange={e => setFormEdicao({...formEdicao, bairro: e.target.value})}
+                        className="w-full bg-gray-800 border border-gray-700 text-white rounded-lg px-3 py-2 text-sm focus:outline-none" />
+                    </div>
+                    <div>
+                      <label className="text-gray-400 text-xs block mb-1">Cidade</label>
+                      <input value={formEdicao.cidade} onChange={e => setFormEdicao({...formEdicao, cidade: e.target.value})}
+                        className="w-full bg-gray-800 border border-gray-700 text-white rounded-lg px-3 py-2 text-sm focus:outline-none" />
+                    </div>
+                    <div className="col-span-2">
+                      <label className="text-gray-400 text-xs block mb-1">Endereço</label>
+                      <input value={formEdicao.endereco} onChange={e => setFormEdicao({...formEdicao, endereco: e.target.value})}
+                        className="w-full bg-gray-800 border border-gray-700 text-white rounded-lg px-3 py-2 text-sm focus:outline-none" />
+                    </div>
+                    <div>
+                      <label className="text-gray-400 text-xs block mb-1">Filiação — Pai</label>
+                      <input value={formEdicao.filiacao_pai} onChange={e => setFormEdicao({...formEdicao, filiacao_pai: e.target.value})}
+                        className="w-full bg-gray-800 border border-gray-700 text-white rounded-lg px-3 py-2 text-sm focus:outline-none" />
+                    </div>
+                    <div>
+                      <label className="text-gray-400 text-xs block mb-1">Filiação — Mãe</label>
+                      <input value={formEdicao.filiacao_mae} onChange={e => setFormEdicao({...formEdicao, filiacao_mae: e.target.value})}
+                        className="w-full bg-gray-800 border border-gray-700 text-white rounded-lg px-3 py-2 text-sm focus:outline-none" />
+                    </div>
+                    <div>
+                      <label className="text-gray-400 text-xs block mb-1">Clínica</label>
+                      <select value={formEdicao.clinica_id} onChange={e => setFormEdicao({...formEdicao, clinica_id: e.target.value})}
+                        className="w-full bg-gray-800 border border-gray-700 text-white rounded-lg px-3 py-2 text-sm focus:outline-none">
+                        <option value="">Selecione...</option>
+                        {clinicas.map(c => <option key={c.id} value={c.id}>{c.nome}</option>)}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="text-gray-400 text-xs block mb-1">Dentista</label>
+                      <select value={formEdicao.dentista_id} onChange={e => setFormEdicao({...formEdicao, dentista_id: e.target.value})}
+                        className="w-full bg-gray-800 border border-gray-700 text-white rounded-lg px-3 py-2 text-sm focus:outline-none">
+                        <option value="">Selecione...</option>
+                        {dentistas.map(d => <option key={d.id} value={d.id}>{d.nome}</option>)}
+                      </select>
+                    </div>
+                    <div className="col-span-2">
+                      <label className="text-gray-400 text-xs block mb-1">Observações clínicas</label>
+                      <textarea value={formEdicao.observacoes_clinicas} onChange={e => setFormEdicao({...formEdicao, observacoes_clinicas: e.target.value})}
+                        className="w-full bg-gray-800 border border-gray-700 text-white rounded-lg px-3 py-2 text-sm focus:outline-none h-20 resize-none" />
+                    </div>
+                  </div>
+                  <div className="flex gap-2 pt-2">
+                    <button onClick={() => setEditandoDados(false)}
+                      className="flex-1 bg-gray-800 hover:bg-gray-700 text-white text-sm font-semibold py-2.5 rounded-lg">Cancelar</button>
+                    <button onClick={salvarEdicaoDados} disabled={salvandoEdicao}
+                      className="flex-1 bg-verde-600 hover:bg-verde-500 text-white text-sm font-semibold py-2.5 rounded-lg disabled:opacity-50">
+                      {salvandoEdicao ? 'Salvando...' : 'Salvar alterações'}
+                    </button>
+                  </div>
                 </div>
               )}
 
