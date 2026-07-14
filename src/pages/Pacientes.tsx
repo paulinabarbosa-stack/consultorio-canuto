@@ -851,7 +851,7 @@ export default function Pacientes() {
                     <label className="text-gray-400 text-xs block mb-1">Descreva o tratamento *</label>
                     <input type="text" placeholder="Descreva o procedimento..." value={formProntuario.tratamento}
                       onChange={e => setFormProntuario({...formProntuario, tratamento: e.target.value})}
-                      className="w-full bg-gray-800 border border-yellow-600 text-white rounded-lg px-3 py-2 text-sm focus:outline-none" autoFocus />
+                      className="w-full bg-gray-800 border border-yellow-600 text-white rounded-lg px-3 py-2 text-sm focus:outline-none" />
                   </div>
                 )}
                 <div className="col-span-2">
