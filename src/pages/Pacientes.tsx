@@ -93,6 +93,7 @@ export default function Pacientes() {
   })
 
   const [editandoProntuarioAberto, setEditandoProntuarioAberto] = useState(false)
+  const [tipoTratamentoSelecionado, setTipoTratamentoSelecionado] = useState('')
   const [formProntuarioEdicao, setFormProntuarioEdicao] = useState({
     id: '', data_procedimento: '', quantidade: 1, tratamento: '', dentista_id: '',
     valor: '', data_pagamento: '', valor_pago: '', forma_pagamento: '', observacoes: '',
@@ -281,6 +282,7 @@ export default function Pacientes() {
       }])
     }
     setNovoProntuarioAberto(false)
+    setTipoTratamentoSelecionado('')
     setFormProntuario({ data_procedimento: new Date().toISOString().split('T')[0], quantidade: 1, tratamento: '', dentista_id: '', valor: '', data_pagamento: '', valor_pago: '', forma_pagamento: '', observacoes: '', orcamento_aprovado: '' })
     const { data } = await supabase.from('prontuario').select('*, dentistas(nome)').eq('paciente_id', pacienteSelecionado.id).order('data_procedimento', { ascending: true })
     if (data) setProntuario(data)
@@ -814,7 +816,7 @@ export default function Pacientes() {
           <div className="bg-gray-900 border border-gray-800 rounded-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between p-5 border-b border-gray-800">
               <h3 className="text-white font-bold">Registrar procedimento</h3>
-              <button onClick={() => setNovoProntuarioAberto(false)} className="text-gray-500 hover:text-white text-xl">×</button>
+              <button onClick={() => { setNovoProntuarioAberto(false); setTipoTratamentoSelecionado('') }} className="text-gray-500 hover:text-white text-xl">×</button>
             </div>
             <div className="p-5 space-y-3">
               <div className="grid grid-cols-2 gap-3">
@@ -832,18 +834,22 @@ export default function Pacientes() {
                 </div>
                 <div className="col-span-2">
                   <label className="text-gray-400 text-xs block mb-1">Tratamento *</label>
-                  <select value={formProntuario.tratamento}
-                    onChange={e => setFormProntuario({...formProntuario, tratamento: e.target.value})}
+                  <select value={tipoTratamentoSelecionado}
+                    onChange={e => {
+                      const valor = e.target.value
+                      setTipoTratamentoSelecionado(valor)
+                      setFormProntuario({...formProntuario, tratamento: valor === '__outro' ? '' : valor})
+                    }}
                     className="w-full bg-gray-800 border border-gray-700 text-white rounded-lg px-3 py-2 text-sm focus:outline-none">
                     <option value="">Selecione o procedimento...</option>
                     {procedimentos.map(p => <option key={p.id} value={p.nome}>{p.nome}</option>)}
                     <option value="__outro">Outro (digitar)</option>
                   </select>
                 </div>
-                {formProntuario.tratamento === '__outro' && (
+                {tipoTratamentoSelecionado === '__outro' && (
                   <div className="col-span-2">
                     <label className="text-gray-400 text-xs block mb-1">Descreva o tratamento *</label>
-                    <input type="text" placeholder="Descreva o procedimento..."
+                    <input type="text" placeholder="Descreva o procedimento..." value={formProntuario.tratamento}
                       onChange={e => setFormProntuario({...formProntuario, tratamento: e.target.value})}
                       className="w-full bg-gray-800 border border-yellow-600 text-white rounded-lg px-3 py-2 text-sm focus:outline-none" autoFocus />
                   </div>
@@ -901,7 +907,7 @@ export default function Pacientes() {
                 </div>
               </div>
               <div className="flex gap-2 pt-2">
-                <button onClick={() => setNovoProntuarioAberto(false)}
+                <button onClick={() => { setNovoProntuarioAberto(false); setTipoTratamentoSelecionado('') }}
                   className="flex-1 bg-gray-800 hover:bg-gray-700 text-white text-sm font-semibold py-2.5 rounded-lg">Cancelar</button>
                 <button onClick={salvarProntuario} disabled={salvando}
                   className="flex-1 bg-verde-600 hover:bg-verde-500 text-white text-sm font-semibold py-2.5 rounded-lg disabled:opacity-50">
