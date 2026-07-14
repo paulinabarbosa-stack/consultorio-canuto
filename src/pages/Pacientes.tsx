@@ -68,6 +68,7 @@ export default function Pacientes() {
   const [fichaSaude, setFichaSaude] = useState<any>({})
   const [fichaObs, setFichaObs] = useState('')
   const [clinicaIdUsuario, setClinicaIdUsuario] = useState<string | null>(null)
+  const [perfilAdmin, setPerfilAdmin] = useState(true)
   const [statusTratamento, setStatusTratamento] = useState('em_andamento')
   const [editandoDados, setEditandoDados] = useState(false)
   const [salvandoEdicao, setSalvandoEdicao] = useState(false)
@@ -96,9 +97,12 @@ export default function Pacientes() {
       const { data: { user } } = await supabase.auth.getUser()
       if (!user) return
       const { data } = await supabase.from('usuarios').select('perfil, clinica_id').eq('auth_id', user.id).maybeSingle()
-      if (data?.clinica_id) {
-        setClinicaIdUsuario(data.clinica_id)
-        setForm(f => ({ ...f, clinica_id: data.clinica_id }))
+      if (data) {
+        setPerfilAdmin(data.perfil !== 'secretaria')
+        if (data.clinica_id) {
+          setClinicaIdUsuario(data.clinica_id)
+          setForm(f => ({ ...f, clinica_id: data.clinica_id }))
+        }
       }
     }
     carregarUsuario()
@@ -277,11 +281,12 @@ export default function Pacientes() {
   }
 
   const pacientesFiltrados = pacientes.filter(p => {
+    const clinicaOk = perfilAdmin || p.clinica_id === clinicaIdUsuario
     const buscaOk = p.nome.toLowerCase().includes(busca.toLowerCase()) ||
       (p.telefone && p.telefone.includes(busca)) ||
       (p.clinicas?.nome && p.clinicas.nome.toLowerCase().includes(busca.toLowerCase()))
     const statusOk = !filtroStatus || (p.status_tratamento || 'em_andamento') === filtroStatus
-    return buscaOk && statusOk
+    return clinicaOk && buscaOk && statusOk
   })
 
   const totalDeve = prontuario.reduce((acc, r) => acc + (parseFloat(r.deve) || 0), 0)
@@ -295,10 +300,11 @@ export default function Pacientes() {
     return { ...r, soma_calculada: somaAcum }
   })
 
-  // Contagem por status
+  // Contagem por status (respeita a restrição de clínica da secretária)
+  const pacientesDaClinica = perfilAdmin ? pacientes : pacientes.filter(p => p.clinica_id === clinicaIdUsuario)
   const contagemStatus = STATUS_TRATAMENTO.map(s => ({
     ...s,
-    qtd: pacientes.filter(p => (p.status_tratamento || 'em_andamento') === s.value).length
+    qtd: pacientesDaClinica.filter(p => (p.status_tratamento || 'em_andamento') === s.value).length
   }))
 
   if (loading) return <div className="text-gray-400">Carregando...</div>
@@ -308,7 +314,7 @@ export default function Pacientes() {
       <div className="flex items-center justify-between mb-6">
         <div>
           <h2 className="text-white text-lg font-bold">Pacientes / CRM</h2>
-          <p className="text-gray-500 text-sm">{pacientes.length} pacientes · {pacientesFiltrados.length} exibidos</p>
+          <p className="text-gray-500 text-sm">{pacientesDaClinica.length} pacientes · {pacientesFiltrados.length} exibidos</p>
         </div>
         <button onClick={() => setNovoModalAberto(true)}
           className="bg-verde-600 hover:bg-verde-500 text-white px-4 py-2 rounded-lg text-sm font-semibold transition-colors">
@@ -570,11 +576,17 @@ export default function Pacientes() {
                     </div>
                     <div>
                       <label className="text-gray-400 text-xs block mb-1">Clínica</label>
-                      <select value={formEdicao.clinica_id} onChange={e => setFormEdicao({...formEdicao, clinica_id: e.target.value})}
-                        className="w-full bg-gray-800 border border-gray-700 text-white rounded-lg px-3 py-2 text-sm focus:outline-none">
-                        <option value="">Selecione...</option>
-                        {clinicas.map(c => <option key={c.id} value={c.id}>{c.nome}</option>)}
-                      </select>
+                      {perfilAdmin ? (
+                        <select value={formEdicao.clinica_id} onChange={e => setFormEdicao({...formEdicao, clinica_id: e.target.value})}
+                          className="w-full bg-gray-800 border border-gray-700 text-white rounded-lg px-3 py-2 text-sm focus:outline-none">
+                          <option value="">Selecione...</option>
+                          {clinicas.map(c => <option key={c.id} value={c.id}>{c.nome}</option>)}
+                        </select>
+                      ) : (
+                        <div className="bg-gray-800 border border-gray-700 text-gray-300 rounded-lg px-3 py-2 text-sm">
+                          {clinicas.find(c => c.id === formEdicao.clinica_id)?.nome}
+                        </div>
+                      )}
                     </div>
                     <div>
                       <label className="text-gray-400 text-xs block mb-1">Dentista</label>
@@ -904,11 +916,17 @@ export default function Pacientes() {
                 </div>
                 <div>
                   <label className="text-gray-400 text-xs block mb-1">Clínica</label>
-                  <select value={form.clinica_id} onChange={e => setForm({...form, clinica_id: e.target.value})}
-                    className="w-full bg-gray-800 border border-gray-700 text-white rounded-lg px-3 py-2 text-sm focus:outline-none">
-                    <option value="">Selecione...</option>
-                    {clinicas.map(c => <option key={c.id} value={c.id}>{c.nome}</option>)}
-                  </select>
+                  {perfilAdmin ? (
+                    <select value={form.clinica_id} onChange={e => setForm({...form, clinica_id: e.target.value})}
+                      className="w-full bg-gray-800 border border-gray-700 text-white rounded-lg px-3 py-2 text-sm focus:outline-none">
+                      <option value="">Selecione...</option>
+                      {clinicas.map(c => <option key={c.id} value={c.id}>{c.nome}</option>)}
+                    </select>
+                  ) : (
+                    <div className="bg-gray-800 border border-gray-700 text-gray-300 rounded-lg px-3 py-2 text-sm">
+                      {clinicas.find(c => c.id === clinicaIdUsuario)?.nome}
+                    </div>
+                  )}
                 </div>
                 <div>
                   <label className="text-gray-400 text-xs block mb-1">Dentista</label>
