@@ -34,7 +34,10 @@ interface AgendamentoSimples {
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
 function toISO(date: Date): string {
-  return date.toISOString().split("T")[0];
+  const ano = date.getFullYear();
+  const mes = String(date.getMonth() + 1).padStart(2, "0");
+  const dia = String(date.getDate()).padStart(2, "0");
+  return `${ano}-${mes}-${dia}`;
 }
 function addDays(date: Date, n: number): Date {
   const d = new Date(date); d.setDate(d.getDate() + n); return d;
