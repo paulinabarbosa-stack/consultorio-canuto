@@ -178,6 +178,24 @@ export default function Pacientes() {
     setSalvandoEdicao(false)
   }
 
+  async function excluirPaciente() {
+    const confirmar = confirm(`Tem certeza que deseja excluir o paciente "${pacienteSelecionado.nome}"? Essa ação não pode ser desfeita.`)
+    if (!confirmar) return
+    const { error } = await supabase.from('pacientes').delete().eq('id', pacienteSelecionado.id)
+    if (error) {
+      // Erro comum: paciente já tem atendimentos, prontuário ou implantes vinculados
+      if (error.message.includes('foreign key') || error.code === '23503') {
+        alert('Não foi possível excluir: esse paciente já tem atendimentos, prontuário ou implantes registrados. Remova esses registros primeiro, ou avise a Paulina para excluir manualmente no banco de dados.')
+      } else {
+        alert('Erro ao excluir: ' + error.message)
+      }
+      return
+    }
+    setPacientes(prev => prev.filter(p => p.id !== pacienteSelecionado.id))
+    setModalAberto(false)
+    setPacienteSelecionado(null)
+  }
+
   async function salvarFichaSaude() {
     setSalvandoFicha(true)
     const novaFicha = { ...fichaSaude, observacoes: fichaObs }
@@ -445,7 +463,13 @@ export default function Pacientes() {
               {/* ABA DADOS */}
               {abaAtiva === 'dados' && !editandoDados && (
                 <div className="space-y-3">
-                  <div className="flex justify-end">
+                  <div className="flex justify-end gap-2">
+                    {perfilAdmin && (
+                      <button onClick={excluirPaciente}
+                        className="bg-red-900/30 hover:bg-red-900/50 border border-red-800 text-red-400 text-xs font-semibold px-3 py-1.5 rounded-lg transition-colors">
+                        🗑️ Excluir paciente
+                      </button>
+                    )}
                     <button onClick={iniciarEdicaoDados}
                       className="bg-gray-800 hover:bg-gray-700 border border-gray-700 text-gray-300 text-xs font-semibold px-3 py-1.5 rounded-lg transition-colors">
                       ✏️ Editar dados
