@@ -54,9 +54,13 @@ function formatDiaSemana(iso: string): string {
 function formatMoeda(v: number): string {
   return v.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 }
+// Normaliza o timestamp para UTC (adiciona Z se não tiver offset) e extrai a hora no fuso de São Paulo
 function extrairHora(dataHora: string): string {
-  const d = new Date(dataHora);
-  return `${String(d.getHours()).padStart(2,"0")}:${String(d.getMinutes()).padStart(2,"0")}`;
+  const normalizado = (dataHora.includes('+') || dataHora.includes('Z') || /\d{2}:\d{2}:\d{2}[+-]/.test(dataHora))
+    ? dataHora
+    : dataHora + 'Z';
+  const d = new Date(normalizado);
+  return d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', timeZone: 'America/Sao_Paulo' });
 }
 
 const STATUS_LABEL: Record<string, string> = {
