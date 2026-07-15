@@ -208,6 +208,17 @@ export default function Atendimentos() {
     setSalvando(false)
   }
 
+  async function excluirAtendimento() {
+    const confirmar = confirm(`Tem certeza que deseja excluir este atendimento de "${editandoAtendimento.pacientes?.nome}" no valor de ${formatarDinheiro(editandoAtendimento.valor)}? Essa ação não pode ser desfeita.`)
+    if (!confirmar) return
+    setSalvando(true)
+    const { error } = await supabase.from('atendimentos').delete().eq('id', editandoAtendimento.id)
+    if (error) { alert('Erro ao excluir: ' + error.message); setSalvando(false); return }
+    setEditandoAtendimento(null)
+    await carregar()
+    setSalvando(false)
+  }
+
   function formatarDinheiro(v: number) {
     return v?.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }) || 'R$ 0,00'
   }
@@ -649,6 +660,10 @@ export default function Atendimentos() {
                 </div>
               </div>
               <div className="flex gap-2 pt-2">
+                <button onClick={excluirAtendimento} disabled={salvando}
+                  className="bg-red-900/30 hover:bg-red-900/50 border border-red-800 text-red-400 text-sm font-semibold px-4 py-2.5 rounded-lg transition-colors disabled:opacity-50">
+                  🗑️ Excluir
+                </button>
                 <button onClick={() => setEditandoAtendimento(null)}
                   className="flex-1 bg-gray-800 hover:bg-gray-700 text-white text-sm font-semibold py-2.5 rounded-lg transition-colors">
                   Cancelar
