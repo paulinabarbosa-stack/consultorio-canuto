@@ -36,6 +36,11 @@ export default function Atendimentos() {
   })
   const [buscaPaciente, setBuscaPaciente] = useState('')
   const [dropdownPacienteAberto, setDropdownPacienteAberto] = useState(false)
+  const [editandoAtendimento, setEditandoAtendimento] = useState<any>(null)
+  const [formEdicao, setFormEdicao] = useState({
+    valor: '', forma_pagamento: '', data_atendimento: '', data_pagamento: '',
+    observacoes: '', envolve_protetico: false, protetico_id: '', protetico_valor: ''
+  })
 
   // Carrega o perfil do usuário logado (admin ou secretária) e sua clínica
   useEffect(() => {
@@ -152,6 +157,57 @@ export default function Atendimentos() {
     setSalvando(false)
   }
 
+  function abrirEdicao(a: any) {
+    setEditandoAtendimento(a)
+    setFormEdicao({
+      valor: a.valor != null ? String(a.valor) : '',
+      forma_pagamento: a.forma_pagamento || '',
+      data_atendimento: a.data_atendimento || '',
+      data_pagamento: a.data_pagamento || '',
+      observacoes: a.observacoes || '',
+      envolve_protetico: !!a.protetico_id,
+      protetico_id: a.protetico_id || '',
+      protetico_valor: a.protetico_valor != null ? String(a.protetico_valor) : '',
+    })
+  }
+
+  async function salvarEdicao() {
+    if (!formEdicao.valor || !formEdicao.forma_pagamento) return alert('Preencha valor e forma de pagamento!')
+    if (!formEdicao.data_pagamento) return alert('Informe a data do pagamento!')
+    if (formEdicao.envolve_protetico && (!formEdicao.protetico_id || !formEdicao.protetico_valor))
+      return alert('Selecione o protético e informe o valor cobrado por ele!')
+
+    setSalvando(true)
+    const valor = parseFloat(formEdicao.valor)
+    const pctComissao = (formEdicao.forma_pagamento === 'Dinheiro' || formEdicao.forma_pagamento === 'Cheque') ? 40 : 36
+    const comissaoValor = valor * pctComissao / 100
+
+    const proteticoValor = formEdicao.envolve_protetico ? parseFloat(formEdicao.protetico_valor) : null
+    const proteticoDescontoDentista = proteticoValor ? proteticoValor * 0.40 : 0
+    const proteticoDescontoClinica = proteticoValor ? proteticoValor * 0.60 : 0
+    const comissaoValorLiquido = comissaoValor - proteticoDescontoDentista
+
+    const { error } = await supabase.from('atendimentos').update({
+      valor,
+      forma_pagamento: formEdicao.forma_pagamento,
+      data_atendimento: formEdicao.data_atendimento,
+      data_pagamento: formEdicao.data_pagamento,
+      observacoes: formEdicao.observacoes || null,
+      comissao_percentual: pctComissao,
+      comissao_valor: comissaoValor,
+      protetico_id: formEdicao.envolve_protetico ? formEdicao.protetico_id : null,
+      protetico_valor: proteticoValor,
+      protetico_desconto_dentista: formEdicao.envolve_protetico ? proteticoDescontoDentista : null,
+      protetico_desconto_clinica: formEdicao.envolve_protetico ? proteticoDescontoClinica : null,
+      comissao_valor_liquido: comissaoValorLiquido,
+    }).eq('id', editandoAtendimento.id)
+    if (error) { alert('Erro: ' + error.message); setSalvando(false); return }
+
+    setEditandoAtendimento(null)
+    await carregar()
+    setSalvando(false)
+  }
+
   function formatarDinheiro(v: number) {
     return v?.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }) || 'R$ 0,00'
   }
@@ -256,6 +312,7 @@ export default function Atendimentos() {
                 <th className="text-right text-gray-500 text-xs px-4 py-3">Valor</th>
                 <th className="text-right text-gray-500 text-xs px-4 py-3">Comissão</th>
                 <th className="text-left text-gray-500 text-xs px-4 py-3">Pagamento</th>
+                <th className="text-center text-gray-500 text-xs px-4 py-3">Ação</th>
               </tr>
             </thead>
             <tbody>
@@ -284,6 +341,12 @@ export default function Atendimentos() {
                     <span className={`text-xs font-semibold px-2 py-1 rounded-full ${PGTO_CORES[a.forma_pagamento] || 'bg-gray-800 text-gray-400'}`}>
                       {a.forma_pagamento}
                     </span>
+                  </td>
+                  <td className="px-4 py-3 text-center">
+                    <button onClick={() => abrirEdicao(a)}
+                      className="text-gray-400 hover:text-white bg-gray-800 hover:bg-gray-700 border border-gray-700 rounded px-2 py-1 text-xs">
+                      ✏️
+                    </button>
                   </td>
                 </tr>
               ))}
@@ -494,6 +557,105 @@ export default function Atendimentos() {
                 <button onClick={salvar} disabled={salvando}
                   className="flex-1 bg-green-700 hover:bg-green-600 text-white text-sm font-semibold py-2.5 rounded-lg transition-colors disabled:opacity-50">
                   {salvando ? 'Salvando...' : 'Salvar atendimento'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {editandoAtendimento && (
+        <div className="fixed inset-0 bg-black/70 z-50 flex items-center justify-center p-4">
+          <div className="bg-gray-900 border border-gray-800 rounded-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between p-5 border-b border-gray-800">
+              <div>
+                <h3 className="text-white font-bold">Editar Atendimento</h3>
+                <p className="text-gray-500 text-xs mt-0.5">{editandoAtendimento.pacientes?.nome} · {nomeProcedimento(editandoAtendimento)}</p>
+              </div>
+              <button onClick={() => setEditandoAtendimento(null)} className="text-gray-500 hover:text-white text-xl">×</button>
+            </div>
+            <div className="p-5 space-y-3">
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-gray-400 text-xs block mb-1">Data do procedimento *</label>
+                  <input type="date" value={formEdicao.data_atendimento}
+                    onChange={e => setFormEdicao({...formEdicao, data_atendimento: e.target.value})}
+                    className="w-full bg-gray-800 border border-gray-700 text-white rounded-lg px-3 py-2 text-sm focus:outline-none" />
+                </div>
+                <div>
+                  <label className="text-gray-400 text-xs block mb-1">Data do pagamento *</label>
+                  <input type="date" value={formEdicao.data_pagamento}
+                    onChange={e => setFormEdicao({...formEdicao, data_pagamento: e.target.value})}
+                    className="w-full bg-gray-800 border border-gray-700 text-white rounded-lg px-3 py-2 text-sm focus:outline-none" />
+                </div>
+                <div>
+                  <label className="text-gray-400 text-xs block mb-1">Valor (R$) *</label>
+                  <input type="number" step="0.01" placeholder="0,00" value={formEdicao.valor}
+                    onChange={e => setFormEdicao({...formEdicao, valor: e.target.value})}
+                    className="w-full bg-gray-800 border border-gray-700 text-white rounded-lg px-3 py-2 text-sm focus:outline-none" />
+                </div>
+                <div>
+                  <label className="text-gray-400 text-xs block mb-1">Forma de pagamento *</label>
+                  <select value={formEdicao.forma_pagamento} onChange={e => setFormEdicao({...formEdicao, forma_pagamento: e.target.value})}
+                    className="w-full bg-gray-800 border border-gray-700 text-white rounded-lg px-3 py-2 text-sm focus:outline-none">
+                    <option value="">Selecione...</option>
+                    <option>Pix</option>
+                    <option>Dinheiro</option>
+                    <option>Cartão de débito</option>
+                    <option>Cartão de crédito</option>
+                    <option>Promissória</option>
+                    <option>Cheque</option>
+                  </select>
+                </div>
+
+                <div className="col-span-2 flex items-center gap-2 pt-1">
+                  <input
+                    type="checkbox"
+                    id="envolve_protetico_edicao"
+                    checked={formEdicao.envolve_protetico}
+                    onChange={e => setFormEdicao({...formEdicao, envolve_protetico: e.target.checked, protetico_id: '', protetico_valor: ''})}
+                    className="w-4 h-4"
+                  />
+                  <label htmlFor="envolve_protetico_edicao" className="text-gray-300 text-sm cursor-pointer">
+                    Este atendimento envolve protético?
+                  </label>
+                </div>
+
+                {formEdicao.envolve_protetico && (
+                  <>
+                    <div>
+                      <label className="text-gray-400 text-xs block mb-1">Protético *</label>
+                      <select value={formEdicao.protetico_id} onChange={e => setFormEdicao({...formEdicao, protetico_id: e.target.value})}
+                        className="w-full bg-gray-800 border border-purple-700 text-white rounded-lg px-3 py-2 text-sm focus:outline-none">
+                        <option value="">Selecione...</option>
+                        {proteticos.map(p => <option key={p.id} value={p.id}>{p.nome}</option>)}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="text-gray-400 text-xs block mb-1">Valor cobrado pelo protético *</label>
+                      <input type="number" step="0.01" placeholder="0,00" value={formEdicao.protetico_valor}
+                        onChange={e => setFormEdicao({...formEdicao, protetico_valor: e.target.value})}
+                        className="w-full bg-gray-800 border border-purple-700 text-white rounded-lg px-3 py-2 text-sm focus:outline-none" />
+                    </div>
+                  </>
+                )}
+
+                <div className="col-span-2">
+                  <label className="text-gray-400 text-xs block mb-1">Observações</label>
+                  <input type="text" value={formEdicao.observacoes}
+                    onChange={e => setFormEdicao({...formEdicao, observacoes: e.target.value})}
+                    placeholder="Anotações..."
+                    className="w-full bg-gray-800 border border-gray-700 text-white rounded-lg px-3 py-2 text-sm focus:outline-none" />
+                </div>
+              </div>
+              <div className="flex gap-2 pt-2">
+                <button onClick={() => setEditandoAtendimento(null)}
+                  className="flex-1 bg-gray-800 hover:bg-gray-700 text-white text-sm font-semibold py-2.5 rounded-lg transition-colors">
+                  Cancelar
+                </button>
+                <button onClick={salvarEdicao} disabled={salvando}
+                  className="flex-1 bg-green-700 hover:bg-green-600 text-white text-sm font-semibold py-2.5 rounded-lg transition-colors disabled:opacity-50">
+                  {salvando ? 'Salvando...' : 'Salvar alterações'}
                 </button>
               </div>
             </div>
