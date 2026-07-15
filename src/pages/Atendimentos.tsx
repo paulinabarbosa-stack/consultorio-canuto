@@ -34,6 +34,8 @@ export default function Atendimentos() {
     valor: '', forma_pagamento: '', observacoes: '',
     envolve_protetico: false, protetico_id: '', protetico_valor: ''
   })
+  const [buscaPaciente, setBuscaPaciente] = useState('')
+  const [dropdownPacienteAberto, setDropdownPacienteAberto] = useState(false)
 
   // Carrega o perfil do usuário logado (admin ou secretária) e sua clínica
   useEffect(() => {
@@ -137,6 +139,7 @@ export default function Atendimentos() {
     }])
     if (error) { alert('Erro: ' + error.message); setSalvando(false); return }
     setModalAberto(false)
+    setBuscaPaciente('')
     setForm({
       paciente_id: '', dentista_id: '', clinica_id: '',
       procedimento_id: '', procedimento_outro: '',
@@ -301,7 +304,7 @@ export default function Atendimentos() {
                 <div>
                   <label className="text-gray-400 text-xs block mb-1">Clínica *</label>
                   {perfilAdmin ? (
-                    <select value={form.clinica_id} onChange={e => setForm({...form, clinica_id: e.target.value, paciente_id: ''})}
+                    <select value={form.clinica_id} onChange={e => { setForm({...form, clinica_id: e.target.value, paciente_id: ''}); setBuscaPaciente('') }}
                       className="w-full bg-gray-800 border border-gray-700 text-white rounded-lg px-3 py-2 text-sm focus:outline-none">
                       <option value="">Selecione...</option>
                       {clinicas.map(c => <option key={c.id} value={c.id}>{c.nome}</option>)}
@@ -320,14 +323,39 @@ export default function Atendimentos() {
                     {dentistas.map(d => <option key={d.id} value={d.id}>{d.nome}</option>)}
                   </select>
                 </div>
-                <div className="col-span-2">
+                <div className="col-span-2 relative">
                   <label className="text-gray-400 text-xs block mb-1">Paciente *</label>
-                  <select value={form.paciente_id} onChange={e => setForm({...form, paciente_id: e.target.value})}
+                  <input
+                    type="text"
+                    value={buscaPaciente}
                     disabled={!form.clinica_id}
-                    className="w-full bg-gray-800 border border-gray-700 text-white rounded-lg px-3 py-2 text-sm focus:outline-none disabled:opacity-50">
-                    <option value="">{form.clinica_id ? 'Selecione o paciente...' : 'Selecione a clínica primeiro'}</option>
-                    {pacientes.filter(p => p.clinica_id === form.clinica_id).map(p => <option key={p.id} value={p.id}>{p.nome}</option>)}
-                  </select>
+                    placeholder={form.clinica_id ? 'Digite o nome do paciente...' : 'Selecione a clínica primeiro'}
+                    onChange={e => {
+                      setBuscaPaciente(e.target.value)
+                      setForm({...form, paciente_id: ''})
+                      setDropdownPacienteAberto(true)
+                    }}
+                    onFocus={() => setDropdownPacienteAberto(true)}
+                    onBlur={() => setTimeout(() => setDropdownPacienteAberto(false), 200)}
+                    className="w-full bg-gray-800 border border-gray-700 text-white rounded-lg px-3 py-2 text-sm focus:outline-none disabled:opacity-50"
+                  />
+                  {dropdownPacienteAberto && form.clinica_id && (
+                    <div className="absolute z-10 mt-1 w-full max-h-48 overflow-y-auto bg-gray-800 border border-gray-700 rounded-lg shadow-lg">
+                      {pacientes.filter(p => p.clinica_id === form.clinica_id && p.nome.toLowerCase().includes(buscaPaciente.toLowerCase())).length === 0 ? (
+                        <div className="px-3 py-2 text-gray-500 text-sm">Nenhum paciente encontrado</div>
+                      ) : (
+                        pacientes
+                          .filter(p => p.clinica_id === form.clinica_id && p.nome.toLowerCase().includes(buscaPaciente.toLowerCase()))
+                          .map(p => (
+                            <div key={p.id}
+                              onClick={() => { setForm({...form, paciente_id: p.id}); setBuscaPaciente(p.nome); setDropdownPacienteAberto(false) }}
+                              className="px-3 py-2 text-white text-sm hover:bg-gray-700 cursor-pointer">
+                              {p.nome}
+                            </div>
+                          ))
+                      )}
+                    </div>
+                  )}
                 </div>
                 <div className="col-span-2">
                   <label className="text-gray-400 text-xs block mb-1">Procedimento</label>
