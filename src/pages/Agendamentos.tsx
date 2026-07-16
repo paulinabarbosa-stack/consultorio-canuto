@@ -31,9 +31,10 @@ export default function Agendamentos() {
   const [perfilAdmin, setPerfilAdmin] = useState(true)
   const [form, setForm] = useState({
     paciente_id: '', dentista_id: '', clinica_id: '',
-    procedimento_id: '', data_hora: '', duracao_minutos: 30,
+    procedimento_id: '', procedimento_outro: '', data_hora: '', duracao_minutos: 30,
     status: 'agendado', observacoes: ''
   })
+  const [tipoProcedimentoSelecionado, setTipoProcedimentoSelecionado] = useState('')
 
   useEffect(() => {
     async function carregarUsuario() {
@@ -90,15 +91,29 @@ export default function Agendamentos() {
   async function salvar() {
     if (!form.paciente_id || !form.dentista_id || !form.clinica_id || !form.data_hora)
       return alert('Preencha paciente, dentista, clínica e data/hora!')
+    if (tipoProcedimentoSelecionado === '__outro' && !form.procedimento_outro.trim())
+      return alert('Descreva o procedimento no campo "Qual procedimento?"')
     setSalvando(true)
+
+    const procedimentoId = tipoProcedimentoSelecionado === '__outro' ? null : (form.procedimento_id || null)
+    const observacoes = tipoProcedimentoSelecionado === '__outro'
+      ? `Procedimento: ${form.procedimento_outro}${form.observacoes ? ' | ' + form.observacoes : ''}`
+      : (form.observacoes || null)
+
     const { error } = await supabase.from('agendamentos').insert([{
-      ...form,
+      paciente_id: form.paciente_id,
+      dentista_id: form.dentista_id,
       clinica_id: form.clinica_id || null,
-      procedimento_id: form.procedimento_id || null,
+      procedimento_id: procedimentoId,
+      data_hora: form.data_hora,
+      duracao_minutos: form.duracao_minutos,
+      status: form.status,
+      observacoes,
     }])
     if (error) { alert('Erro: ' + error.message); setSalvando(false); return }
     setModalAberto(false)
-    setForm({ paciente_id: '', dentista_id: '', clinica_id: clinicaIdUsuario || '', procedimento_id: '', data_hora: '', duracao_minutos: 30, status: 'agendado', observacoes: '' })
+    setTipoProcedimentoSelecionado('')
+    setForm({ paciente_id: '', dentista_id: '', clinica_id: clinicaIdUsuario || '', procedimento_id: '', procedimento_outro: '', data_hora: '', duracao_minutos: 30, status: 'agendado', observacoes: '' })
     await carregar()
     setSalvando(false)
   }
@@ -255,16 +270,37 @@ export default function Agendamentos() {
                 </div>
                 <div className="col-span-2">
                   <label className="text-gray-400 text-xs block mb-1">Procedimento</label>
-                  <select value={form.procedimento_id}
+                  <select value={tipoProcedimentoSelecionado}
                     onChange={e => {
-                      const proc = procedimentos.find(p => p.id === e.target.value)
-                      setForm({...form, procedimento_id: e.target.value, duracao_minutos: proc?.duracao_minutos || 30})
+                      const valor = e.target.value
+                      setTipoProcedimentoSelecionado(valor)
+                      if (valor === '__outro') {
+                        setForm({...form, procedimento_id: '', procedimento_outro: ''})
+                      } else {
+                        const proc = procedimentos.find(p => p.id === valor)
+                        setForm({...form, procedimento_id: valor, duracao_minutos: proc?.duracao_minutos || 30, procedimento_outro: ''})
+                      }
                     }}
                     className="w-full bg-gray-800 border border-gray-700 text-white rounded-lg px-3 py-2 text-sm focus:outline-none">
                     <option value="">Selecione o procedimento...</option>
                     {procedimentos.map(p => <option key={p.id} value={p.id}>{p.nome} ({p.duracao_minutos}min)</option>)}
+                    <option value="__outro">Outro (digitar)</option>
                   </select>
                 </div>
+
+                {tipoProcedimentoSelecionado === '__outro' && (
+                  <div className="col-span-2">
+                    <label className="text-gray-400 text-xs block mb-1">Qual procedimento? *</label>
+                    <input
+                      type="text"
+                      value={form.procedimento_outro}
+                      onChange={e => setForm({...form, procedimento_outro: e.target.value})}
+                      placeholder="Descreva o procedimento..."
+                      className="w-full bg-gray-800 border border-yellow-600 text-white rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-yellow-500"
+                    />
+                  </div>
+                )}
+
                 <div>
                   <label className="text-gray-400 text-xs block mb-1">Data e hora *</label>
                   <input type="datetime-local" value={form.data_hora}
@@ -286,7 +322,7 @@ export default function Agendamentos() {
                 </div>
               </div>
               <div className="flex gap-2 pt-2">
-                <button onClick={() => setModalAberto(false)}
+                <button onClick={() => { setModalAberto(false); setTipoProcedimentoSelecionado('') }}
                   className="flex-1 bg-gray-800 hover:bg-gray-700 text-white text-sm font-semibold py-2.5 rounded-lg transition-colors">
                   Cancelar
                 </button>
