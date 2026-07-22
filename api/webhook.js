@@ -5,7 +5,7 @@
 // 1) Verificação inicial (método GET) — confirma que o link é seu, usando o WEBHOOK_VERIFY_TOKEN
 // 2) Recebimento de mensagens e eventos (método POST) — toda mensagem que o paciente manda chega aqui
 
-module.exports = async function handler(req, res) {
+export default async function handler(req, res) {
   // ── 1) VERIFICAÇÃO DO WEBHOOK (a Meta chama isso quando seu parceiro configura o link) ──
   if (req.method === 'GET') {
     const mode = req.query['hub.mode']
