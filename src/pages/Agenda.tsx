@@ -356,10 +356,47 @@ function ModalNovoAgendamento({ clinicaId, dentistas, celula, dentistaPre, onClo
   const [observacoes, setObservacoes] = useState("");
   const [salvando, setSalvando] = useState(false);
 
+  // Cadastro rápido de paciente novo, direto na agenda
+  const [modoNovoPaciente, setModoNovoPaciente] = useState(false);
+  const [novoNome, setNovoNome] = useState("");
+  const [novoTelefone, setNovoTelefone] = useState("");
+  const [criandoPaciente, setCriandoPaciente] = useState(false);
+
   useEffect(() => {
     supabase.from("pacientes").select("id, nome").order("nome").then(({ data }) => { if (data) setPacientes(data); });
     supabase.from("procedimentos").select("id, nome").order("nome").then(({ data }) => { if (data) setProcedimentos(data); });
   }, []);
+
+  function selecionarPaciente(valor: string) {
+    if (valor === "__novo") {
+      setModoNovoPaciente(true);
+      setPacienteId("");
+    } else {
+      setModoNovoPaciente(false);
+      setPacienteId(valor);
+    }
+  }
+
+  async function criarPacienteRapido() {
+    if (!novoNome.trim() || !novoTelefone.trim()) {
+      alert("Preencha nome e celular do paciente!");
+      return;
+    }
+    setCriandoPaciente(true);
+    const { data, error } = await supabase.from("pacientes").insert([{
+      nome: novoNome.trim(),
+      telefone: novoTelefone.trim(),
+      clinica_id: clinicaId || null,
+      status_tratamento: "em_andamento",
+    }]).select("id, nome").single();
+    setCriandoPaciente(false);
+    if (error) { alert("Erro ao cadastrar paciente: " + error.message); return; }
+    setPacientes(prev => [...prev, data].sort((a, b) => a.nome.localeCompare(b.nome)));
+    setPacienteId(data.id);
+    setModoNovoPaciente(false);
+    setNovoNome("");
+    setNovoTelefone("");
+  }
 
   async function salvar() {
     if (!pacienteId || !dentistaId || !data || !hora) return;
@@ -384,11 +421,39 @@ function ModalNovoAgendamento({ clinicaId, dentistas, celula, dentistaPre, onClo
         <div className="px-6 py-4 flex flex-col gap-3">
           <div>
             <label className="text-xs font-medium text-gray-500 mb-1 block">Paciente *</label>
-            <select value={pacienteId} onChange={e => setPacienteId(e.target.value)}
-              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
-              <option value="">Selecione o paciente</option>
-              {pacientes.map(p => <option key={p.id} value={p.id}>{p.nome}</option>)}
-            </select>
+            {!modoNovoPaciente ? (
+              <select value={pacienteId} onChange={e => selecionarPaciente(e.target.value)}
+                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+                <option value="">Selecione o paciente</option>
+                {pacientes.map(p => <option key={p.id} value={p.id}>{p.nome}</option>)}
+                <option value="__novo">+ Cadastrar novo paciente</option>
+              </select>
+            ) : (
+              <div className="border border-blue-200 bg-blue-50/50 rounded-lg p-3 flex flex-col gap-2">
+                <div>
+                  <label className="text-xs font-medium text-gray-500 mb-1 block">Nome completo *</label>
+                  <input type="text" value={novoNome} onChange={e => setNovoNome(e.target.value)}
+                    placeholder="Nome do paciente"
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                </div>
+                <div>
+                  <label className="text-xs font-medium text-gray-500 mb-1 block">Celular *</label>
+                  <input type="text" value={novoTelefone} onChange={e => setNovoTelefone(e.target.value)}
+                    placeholder="(38) 99999-9999"
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                </div>
+                <div className="flex gap-2 pt-1">
+                  <button onClick={() => setModoNovoPaciente(false)} type="button"
+                    className="flex-1 text-xs text-gray-500 hover:text-gray-700 py-1.5">
+                    Cancelar
+                  </button>
+                  <button onClick={criarPacienteRapido} disabled={criandoPaciente} type="button"
+                    className="flex-1 bg-blue-600 hover:bg-blue-700 text-white text-xs font-medium py-1.5 rounded-lg disabled:opacity-50">
+                    {criandoPaciente ? "Cadastrando..." : "Cadastrar e selecionar"}
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
           <div>
             <label className="text-xs font-medium text-gray-500 mb-1 block">Dentista *</label>
