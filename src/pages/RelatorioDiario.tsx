@@ -54,6 +54,7 @@ function formatDiaSemana(iso: string): string {
 function formatMoeda(v: number): string {
   return v.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 }
+
 // Normaliza o timestamp para UTC (adiciona Z se não tiver offset) e extrai a hora no fuso de São Paulo
 function extrairHora(dataHora: string): string {
   const normalizado = (dataHora.includes('+') || dataHora.includes('Z') || /\d{2}:\d{2}:\d{2}[+-]/.test(dataHora))
@@ -283,7 +284,7 @@ export default function RelatorioDiario() {
           </div>
 
           {/* Agendamentos por dentista */}
-          <div className="bg-white rounded-xl border border-gray-200 mb-4 overflow-hidden">
+          <div className="bg-white rounded-xl border border-gray-200 mb-4 overflow-hidden secao-impressao">
             <div className="px-5 py-3 border-b border-gray-100 bg-gray-50">
               <h3 className="font-semibold text-gray-700 flex items-center gap-2">
                 <Calendar size={16} className="text-blue-600" />
@@ -298,7 +299,7 @@ export default function RelatorioDiario() {
                 const nomeDentista = agendamentos.find(a => a.dentista_id === did)?.dentista_nome ?? "—";
                 const ags = agendamentos.filter(a => a.dentista_id === did).sort((a,b) => a.hora.localeCompare(b.hora));
                 return (
-                  <div key={did}>
+                  <div key={did} className="bloco-impressao">
                     <div className="px-5 py-2 bg-blue-600">
                       <p className="text-white font-semibold text-sm">👨‍⚕️ {nomeDentista}</p>
                     </div>
@@ -335,7 +336,7 @@ export default function RelatorioDiario() {
 
           {/* Financeiro do dia */}
           {atendimentos.length > 0 && (
-            <div className="bg-white rounded-xl border border-gray-200 mb-4 overflow-hidden">
+            <div className="bg-white rounded-xl border border-gray-200 mb-4 overflow-hidden secao-impressao">
               <div className="px-5 py-3 border-b border-gray-100 bg-gray-50">
                 <h3 className="font-semibold text-gray-700">💰 Financeiro do Dia</h3>
               </div>
@@ -381,7 +382,7 @@ export default function RelatorioDiario() {
               </table>
 
               {/* Resumo por forma de pagamento */}
-              <div className="px-5 py-4 border-t border-gray-100 bg-gray-50">
+              <div className="px-5 py-4 border-t border-gray-100 bg-gray-50 bloco-impressao">
                 <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Por forma de pagamento</p>
                 <div className="flex flex-wrap gap-3">
                   {[...new Set(atendimentos.map(a => a.forma_pagamento))].map(fp => {
@@ -397,7 +398,7 @@ export default function RelatorioDiario() {
               </div>
 
               {/* Comissão por dentista */}
-              <div className="px-5 py-4 border-t border-gray-100">
+              <div className="px-5 py-4 border-t border-gray-100 bloco-impressao">
                 <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Comissão por dentista</p>
                 <div className="flex flex-wrap gap-3">
                   {[...new Set(atendimentos.map(a => a.dentista_id))].map(did => {
@@ -417,7 +418,7 @@ export default function RelatorioDiario() {
 
           {/* Protéticos */}
           {proteticosDodia.length > 0 && (
-            <div className="bg-white rounded-xl border border-gray-200 mb-4 overflow-hidden">
+            <div className="bg-white rounded-xl border border-gray-200 mb-4 overflow-hidden secao-impressao">
               <div className="px-5 py-3 border-b border-gray-100 bg-gray-50">
                 <h3 className="font-semibold text-gray-700">🔧 Protéticos do Dia</h3>
               </div>
@@ -462,9 +463,24 @@ export default function RelatorioDiario() {
       {/* CSS de impressão */}
       <style>{`
         @media print {
+          @page {
+            size: A4;
+            margin: 12mm;
+          }
           .no-print { display: none !important; }
-          body { background: white; }
-          .print-area { max-width: 100%; padding: 0; }
+          body { background: white; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+          .print-area {
+            max-width: 100% !important;
+            width: 100% !important;
+            padding: 0 !important;
+            margin: 0 !important;
+            font-size: 11px;
+          }
+          .secao-impressao { page-break-inside: avoid; break-inside: avoid; }
+          .bloco-impressao { page-break-inside: avoid; break-inside: avoid; }
+          table { page-break-inside: auto; }
+          tr { page-break-inside: avoid; break-inside: avoid; }
+          thead { display: table-header-group; }
         }
       `}</style>
     </div>
