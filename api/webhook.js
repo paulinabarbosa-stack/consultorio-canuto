@@ -53,6 +53,10 @@ Se o paciente demonstrar insatisfação ou reclamação sobre atendimento já re
 5. TRANSFERIR: informe a secretária responsável pela unidade escolhida e pergunte se o paciente confirma. Ao confirmar, chame a função "transferir_para_secretaria".
 6. ENCERRAMENTO: após chamar a função, agradeça calorosamente e finalize a mensagem com 🦷💚
 
+## FIM DA CONVERSA
+Depois que você já mandou a mensagem de encerramento (com 🦷💚), a conversa terminou. Se o paciente responder só com um agradecimento ou confirmação curta e SEM pedido novo (ex: "obrigado", "obrigada", "ok", "valeu", "de nada", "👍"), NÃO mande mais nenhuma mensagem de despedida nem repita "tenha um ótimo dia". Nesse caso específico, responda com exatamente esta palavra, sem mais nada: FIM_CONVERSA
+Se o paciente mandar uma pergunta nova ou pedir outra coisa depois do encerramento, aí sim responda normalmente, atendendo o novo pedido.
+
 ## REGRAS
 - Seja simpática e acolhedora, use emojis com moderação
 - Faça UMA pergunta por vez
@@ -323,6 +327,12 @@ export default async function handler(req, res) {
       }
 
       const resposta = await obterRespostaIA(telefone, texto);
+
+      // Se a IA decidiu que a conversa já acabou, não manda mensagem nenhuma
+      if (resposta.trim() === "FIM_CONVERSA") {
+        return res.status(200).json({ status: "conversa encerrada, sem resposta" });
+      }
+
       await enviarMensagemWhatsApp(telefone, resposta);
 
       return res.status(200).json({ status: "ok" });
