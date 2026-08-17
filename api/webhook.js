@@ -35,18 +35,20 @@ Depois de identificar a necessidade do paciente, pergunte em qual unidade ele pr
 - Palha (secretária Elaine)
 - Rio Grande (secretária Débora)
 
-Quando o paciente escolher a unidade, informe o nome da secretária responsável e diga que vai transferir o atendimento para ela dar continuidade ao agendamento. NÃO revele o número de telefone da secretária na mensagem — o sistema cuida da transferência internamente.
+Quando o paciente escolher a unidade, informe o nome da secretária responsável, diga que vai transferir o atendimento para ela dar continuidade ao agendamento, e pergunte se ele confirma. NÃO revele o número de telefone da secretária na mensagem — o sistema cuida da transferência internamente.
+
+Quando o paciente CONFIRMAR a transferência (ex: "sim", "pode ser", "ok"), chame a função "transferir_para_secretaria" com a unidade escolhida, o nome do paciente e um resumo curto da necessidade dele. Só depois disso escreva a mensagem final de encerramento.
 
 ## RECLAMAÇÕES
-Se o paciente demonstrar insatisfação, reclamação ou problema com atendimento já realizado, NÃO tente resolver nem colete dados de agendamento. Diga que vai transferir imediatamente o caso para a Bia, gerente dos consultórios, e encerre a conversa com isso.
+Se o paciente demonstrar insatisfação, reclamação ou problema com atendimento já realizado, NÃO tente resolver nem colete dados de agendamento. Chame a função "transferir_para_gerencia" com o nome do paciente (se souber) e um resumo da reclamação, e encerre a conversa avisando que a Bia (gerente) vai entrar em contato.
 
 ## FLUXO DE ATENDIMENTO
 1. BOAS-VINDAS: cumprimente com simpatia, apresente-se como "Agente Virtual dos Consultórios Odontológicos Dr. Thiago Canuto", pergunte o nome do paciente.
 2. IDENTIFICAR A NECESSIDADE: pergunte o que o paciente precisa, usando a lista de serviços para entender mesmo descrições informais.
 3. INDICAR O PROFISSIONAL: siga a regra da seção EQUIPE DE DENTISTAS.
 4. ESCOLHER A UNIDADE: pergunte em qual das 4 unidades o paciente prefere ser atendido.
-5. TRANSFERIR: informe a secretária responsável pela unidade escolhida e que ela vai continuar o atendimento para agendar. Pergunte se o paciente confirma a transferência.
-6. ENCERRAMENTO: após a confirmação do paciente, agradeça calorosamente e finalize a mensagem com 🦷💚
+5. TRANSFERIR: informe a secretária responsável pela unidade escolhida e pergunte se o paciente confirma. Ao confirmar, chame a função "transferir_para_secretaria".
+6. ENCERRAMENTO: após chamar a função, agradeça calorosamente e finalize a mensagem com 🦷💚
 
 ## REGRAS
 - Seja simpática e acolhedora, use emojis com moderação
@@ -54,21 +56,77 @@ Se o paciente demonstrar insatisfação, reclamação ou problema com atendiment
 - Se receber áudio ou imagem, responda: "Olá! No momento só consigo receber mensagens de texto. Pode me escrever? 😊"
 - Se perguntarem sobre disponibilidade/horários, responda que a secretária da unidade vai confirmar isso diretamente
 - Nunca invente preços, horários, disponibilidade ou serviços que não estão na lista
-- Reclamações sempre vão direto para a Bia (gerente), nunca tente resolver sozinho
 - NUNCA escreva placeholders como [seu nome], [nome do paciente] ou similares. Se o paciente ainda não disse o nome, pergunte diretamente antes de continuar. Se ele já disse, use o nome real que ele informou
-- Depois que o paciente confirmar que quer ser transferido (ex: "sim", "pode ser", "ok"), apenas agradeça e encerre a conversa com a despedida. NUNCA reinicie a conversa nem repita perguntas que já foram respondidas antes
+- Depois de chamar a função de transferência, apenas agradeça e encerre a conversa com a despedida. NUNCA reinicie a conversa nem repita perguntas que já foram respondidas antes
 - Preste atenção em tudo que já foi dito na conversa antes de perguntar algo — nunca peça de novo uma informação que o paciente já informou`;
 
-// ─── Contatos das unidades e da gerência (não citados diretamente pela IA) ──
+// ─── Contatos das unidades e da gerência ────────────────────────────────────
 
 const CONTATOS_UNIDADES = {
   "bom jesus": { secretaria: "Ana", telefone: "5538999720229" },
-  "largo dom joao": { secretaria: "Adriana e Luziane", telefone: "553899723468" },
+  "largo dom joao": { secretaria: "Adriana e Luziane", telefone: "5538997234680" },
   "palha": { secretaria: "Elaine", telefone: "5538998089805" },
   "rio grande": { secretaria: "Débora", telefone: "5538998096248" },
 };
 
-const CONTATO_GERENCIA = { nome: "Bia - Gerente", telefone: "553899999996470" };
+const CONTATO_GERENCIA = { nome: "Bia", telefone: "5538999996470" }; // CONFIRME ESTE NÚMERO ANTES DE USAR COM PACIENTES REAIS
+
+// ─── Definição das funções (tools) que a IA pode chamar ─────────────────────
+
+const TOOLS = [
+  {
+    type: "function",
+    function: {
+      name: "transferir_para_secretaria",
+      description: "Transfere o atendimento para a secretária da unidade escolhida, enviando uma mensagem de WhatsApp para ela com os dados do paciente.",
+      parameters: {
+        type: "object",
+        properties: {
+          unidade: { type: "string", enum: Object.keys(CONTATOS_UNIDADES) },
+          nome_paciente: { type: "string" },
+          resumo: { type: "string", description: "Resumo curto da necessidade do paciente e do dentista indicado" },
+        },
+        required: ["unidade", "nome_paciente", "resumo"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "transferir_para_gerencia",
+      description: "Transfere uma reclamação para a Bia, gerente dos consultórios, enviando uma mensagem de WhatsApp para ela com os dados do paciente.",
+      parameters: {
+        type: "object",
+        properties: {
+          nome_paciente: { type: "string" },
+          resumo: { type: "string", description: "Resumo da reclamação do paciente" },
+        },
+        required: ["resumo"],
+      },
+    },
+  },
+];
+
+// ─── Executar as funções (enviar notificação real pelo WhatsApp) ───────────
+
+async function executarFuncao(nomeFuncao, args, telefonePaciente) {
+  if (nomeFuncao === "transferir_para_secretaria") {
+    const unidade = CONTATOS_UNIDADES[args.unidade];
+    if (!unidade) return "Unidade não encontrada";
+
+    const mensagem = `📋 *Novo atendimento transferido pelo Agente Virtual*\n\n👤 Paciente: ${args.nome_paciente}\n📱 Telefone: ${telefonePaciente}\n🦷 Necessidade: ${args.resumo}\n\nPor favor, entre em contato para dar continuidade ao agendamento.`;
+    await enviarMensagemWhatsApp(unidade.telefone, mensagem);
+    return `Transferido para ${unidade.secretaria} com sucesso`;
+  }
+
+  if (nomeFuncao === "transferir_para_gerencia") {
+    const mensagem = `⚠️ *Reclamação transferida pelo Agente Virtual*\n\n👤 Paciente: ${args.nome_paciente || "não informado"}\n📱 Telefone: ${telefonePaciente}\n📝 Resumo: ${args.resumo}\n\nPor favor, entre em contato o quanto antes.`;
+    await enviarMensagemWhatsApp(CONTATO_GERENCIA.telefone, mensagem);
+    return "Transferido para a Bia com sucesso";
+  }
+
+  return "Função desconhecida";
+}
 
 // ─── Supabase: buscar e salvar histórico ────────────────────────────────────
 
@@ -92,7 +150,7 @@ async function buscarHistorico(telefone) {
 
 async function salvarHistorico(telefone, mensagens) {
   try {
-   const url = `${SUPABASE_URL}/rest/v1/conversas_agente?on_conflict=telefone`;
+    const url = `${SUPABASE_URL}/rest/v1/conversas_agente?on_conflict=telefone`;
     await fetch(url, {
       method: "POST",
       headers: {
@@ -114,25 +172,50 @@ async function salvarHistorico(telefone, mensagens) {
 
 // ─── OpenAI ──────────────────────────────────────────────────────────────────
 
+async function chamarOpenAI(mensagens) {
+  const res = await fetch("https://api.openai.com/v1/chat/completions", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${OPENAI_API_KEY}`,
+    },
+    body: JSON.stringify({
+      model: "gpt-4o-mini",
+      messages: [{ role: "system", content: SYSTEM_PROMPT }, ...mensagens],
+      tools: TOOLS,
+    }),
+  });
+  return res.json();
+}
+
 async function obterRespostaIA(telefone, mensagemUsuario) {
   try {
     const historico = await buscarHistorico(telefone);
     historico.push({ role: "user", content: mensagemUsuario });
 
-    const res = await fetch("https://api.openai.com/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${OPENAI_API_KEY}`,
-      },
-      body: JSON.stringify({
-        model: "gpt-4o-mini",
-        messages: [{ role: "system", content: SYSTEM_PROMPT }, ...historico],
-      }),
-    });
+    let data = await chamarOpenAI(historico);
+    let mensagemResposta = data?.choices?.[0]?.message;
 
-    const data = await res.json();
-    const resposta = data?.choices?.[0]?.message?.content || "Desculpe, tive um probleminha. Pode repetir? 😊";
+    // Se a IA decidiu chamar uma função (transferir para secretária ou gerência)
+    if (mensagemResposta?.tool_calls?.length > 0) {
+      historico.push(mensagemResposta);
+
+      for (const toolCall of mensagemResposta.tool_calls) {
+        const args = JSON.parse(toolCall.function.arguments || "{}");
+        const resultado = await executarFuncao(toolCall.function.name, args, telefone);
+        historico.push({
+          role: "tool",
+          tool_call_id: toolCall.id,
+          content: resultado,
+        });
+      }
+
+      // Segunda chamada, agora com o resultado da função, para gerar a mensagem final ao paciente
+      data = await chamarOpenAI(historico);
+      mensagemResposta = data?.choices?.[0]?.message;
+    }
+
+    const resposta = mensagemResposta?.content || "Desculpe, tive um probleminha. Pode repetir? 😊";
 
     historico.push({ role: "assistant", content: resposta });
     await salvarHistorico(telefone, historico);
