@@ -69,7 +69,7 @@ const CONTATOS_UNIDADES = {
   "rio grande": { secretaria: "Débora", telefone: "5538998096248" },
 };
 
-const CONTATO_GERENCIA = { nome: "Bia", telefone: "5538999996470" }; // CONFIRME ESTE NÚMERO ANTES DE USAR COM PACIENTES REAIS
+const CONTATO_GERENCIA = { nome: "Bia", telefone: "5538999996470" };
 
 // ─── Definição das funções (tools) que a IA pode chamar ─────────────────────
 
@@ -195,6 +195,7 @@ async function obterRespostaIA(telefone, mensagemUsuario) {
 
     let data = await chamarOpenAI(historico);
     let mensagemResposta = data?.choices?.[0]?.message;
+    console.log("DEBUG resposta IA:", JSON.stringify(mensagemResposta));
 
     // Se a IA decidiu chamar uma função (transferir para secretária ou gerência)
     if (mensagemResposta?.tool_calls?.length > 0) {
