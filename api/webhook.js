@@ -92,7 +92,7 @@ async function buscarHistorico(telefone) {
 
 async function salvarHistorico(telefone, mensagens) {
   try {
-    const url = `${SUPABASE_URL}/rest/v1/conversas_agente`;
+   const url = `${SUPABASE_URL}/rest/v1/conversas_agente?on_conflict=telefone`;
     await fetch(url, {
       method: "POST",
       headers: {
