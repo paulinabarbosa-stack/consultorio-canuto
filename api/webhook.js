@@ -1,5 +1,5 @@
 // api/webhook.js
-// Agente Virtual dos Consultórios Odontológicos Dr. Thiago Canuto
+// Consultórios Odontológicos Dr. Thiago Canuto
 // Integração: Meta WhatsApp Business Cloud API + OpenAI + Supabase (histórico)
 
 const WHATSAPP_TOKEN = process.env.WHATSAPP_TOKEN;
@@ -9,7 +9,7 @@ const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
 const SUPABASE_URL = process.env.VITE_SUPABASE_URL;
 const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
-const SYSTEM_PROMPT = `Você é o Agente Virtual dos Consultórios Odontológicos Dr. Thiago Canuto. Você não tem nome próprio — sempre que se apresentar, use exatamente "Agente Virtual dos Consultórios Odontológicos Dr. Thiago Canuto".
+const SYSTEM_PROMPT = `Você faz o atendimento inicial dos Consultórios Odontológicos Dr. Thiago Canuto pelo WhatsApp. NÃO se identifique como robô, inteligência artificial ou "agente virtual" em nenhum momento — cumprimente de forma natural, como uma recepção normal faria.
 
 Seu papel é recepcionar os pacientes com simpatia e profissionalismo, entender a necessidade deles, indicar o profissional mais adequado e transferir o atendimento para a secretária da unidade que o paciente escolher, para que ela conclua o agendamento. Você NÃO agenda horários — quem agenda é a secretária de cada unidade.
 
@@ -51,7 +51,7 @@ IMPORTANTE: NUNCA chame "transferir_para_gerencia" para cancelamento ou remarca�
 Só chame "transferir_para_gerencia" quando o paciente reclamar especificamente de um atendimento, procedimento, cobrança ou profissional — algo que já aconteceu de errado. NÃO tente resolver nem colete dados de agendamento nesse caso. Chame a função com o nome do paciente (se souber) e um resumo da reclamação, e encerre a conversa avisando que a Bia (gerente) vai entrar em contato.
 
 ## FLUXO DE ATENDIMENTO
-1. BOAS-VINDAS: cumprimente com simpatia, apresente-se como "Agente Virtual dos Consultórios Odontológicos Dr. Thiago Canuto", pergunte o nome do paciente.
+1. BOAS-VINDAS: cumprimente com simpatia, dê boas-vindas aos Consultórios Odontológicos Dr. Thiago Canuto com uma saudação normal (NÃO diga que é robô, IA ou agente virtual), e pergunte o nome do paciente.
 2. IDENTIFICAR A NECESSIDADE: pergunte o que o paciente precisa. Se for atendimento infantil, siga a seção ATENDIMENTO INFANTIL. Se for cancelamento/remarcação, siga a seção específica (sempre secretária). Se for uma nova necessidade odontológica de adulto, use a lista de serviços para entender mesmo descrições informais.
 3. INDICAR O PROFISSIONAL: siga a regra da seção EQUIPE DE DENTISTAS (não se aplica a atendimento infantil, cancelamento ou remarcação).
 4. ESCOLHER A UNIDADE: pergunte em qual das 4 unidades o paciente prefere ser atendido (ou onde a consulta está marcada, no caso de cancelamento/remarcação). Para atendimento infantil, pule esta etapa — já é Largo Dom João.
@@ -71,18 +71,30 @@ Se o paciente mandar uma pergunta nova ou pedir outra coisa depois do encerramen
 - NUNCA escreva placeholders como [seu nome], [nome do paciente] ou similares. Se o paciente ainda não disse o nome, pergunte diretamente antes de continuar. Se ele já disse, use o nome real que ele informou
 - Depois de chamar a função de transferência, apenas agradeça e encerre a conversa com a despedida. NUNCA reinicie a conversa nem repita perguntas que já foram respondidas antes
 - Preste atenção em tudo que já foi dito na conversa antes de perguntar algo — nunca peça de novo uma informação que o paciente já informou
-- NUNCA copie ou repita literalmente o texto técnico que o resultado de uma função retorna (ex: "Transferido para X com sucesso"). Depois de chamar uma função, sempre escreva você mesmo uma mensagem natural e calorosa de encerramento, nunca o texto cru do sistema`;
+- NUNCA copie ou repita literalmente o texto técnico que o resultado de uma função retorna (ex: "Transferido para X com sucesso"). Depois de chamar uma função, sempre escreva você mesmo uma mensagem natural e calorosa de encerramento, nunca o texto cru do sistema
+- Nunca se identifique como robô, inteligência artificial, assistente virtual ou "agente virtual" em nenhuma mensagem, mesmo que o paciente pergunte diretamente — nesse caso, apenas responda normalmente como uma recepção faria`;
 
 // ─── Contatos das unidades e da gerência ────────────────────────────────────
 
 const CONTATOS_UNIDADES = {
   "bom jesus": { secretaria: "Ana", telefone: "5538999720229" },
   "largo dom joao": { secretaria: "Adriana e Luziane", telefone: "5538997234680" },
-  "palha": { secretaria: "Elaine", telefone: "5538998089805" },
+  "palha": { secretaria: "Elaine", telefone: "5538998096248" },
   "rio grande": { secretaria: "Débora", telefone: "5538998096248" },
 };
 
 const CONTATO_GERENCIA = { nome: "Bia", telefone: "5538999996470" };
+
+// ─── IDs reais das clínicas no Supabase (tabela "clinicas") ─────────────────
+// Palha aponta para o mesmo id do Rio Grande, pois as duas são atendidas
+// juntas pela Débora (decisão da Paulina, 19/08/2026).
+
+const CLINICA_IDS = {
+  "bom jesus": "f4d54baf-4113-4831-99f4-e4e0880a2857",
+  "largo dom joao": "72f99ea0-5338-4a71-abe2-f5174574bf7e",
+  "palha": "9d762f26-e3a8-4649-935a-5579540f536b",
+  "rio grande": "9d762f26-e3a8-4649-935a-5579540f536b",
+};
 
 // ─── Definição das funções (tools) que a IA pode chamar ─────────────────────
 
@@ -125,20 +137,22 @@ const TOOLS = [
 async function executarFuncao(nomeFuncao, args, telefonePaciente) {
   if (nomeFuncao === "transferir_para_secretaria") {
     const unidade = CONTATOS_UNIDADES[args.unidade];
-    if (!unidade) return "Unidade não encontrada";
+    if (!unidade) return { resultado: "Unidade não encontrada", clinicaId: null };
 
-    const mensagem = `📋 *Novo atendimento transferido pelo Agente Virtual*\n\n👤 Paciente: ${args.nome_paciente}\n📱 Telefone: ${telefonePaciente}\n🦷 Necessidade: ${args.resumo}\n\nPor favor, entre em contato para dar continuidade ao agendamento.`;
+    const mensagem = `📋 *Novo atendimento transferido*\n\n👤 Paciente: ${args.nome_paciente}\n📱 Telefone: ${telefonePaciente}\n🦷 Necessidade: ${args.resumo}\n\nPor favor, entre em contato para dar continuidade ao agendamento.`;
     await enviarMensagemWhatsApp(unidade.telefone, mensagem);
-    return `Transferido para ${unidade.secretaria} com sucesso`;
+
+    const clinicaId = CLINICA_IDS[args.unidade] || null;
+    return { resultado: `Transferido para ${unidade.secretaria} com sucesso`, clinicaId };
   }
 
   if (nomeFuncao === "transferir_para_gerencia") {
-    const mensagem = `⚠️ *Reclamação transferida pelo Agente Virtual*\n\n👤 Paciente: ${args.nome_paciente || "não informado"}\n📱 Telefone: ${telefonePaciente}\n📝 Resumo: ${args.resumo}\n\nPor favor, entre em contato o quanto antes.`;
+    const mensagem = `⚠️ *Reclamação transferida*\n\n👤 Paciente: ${args.nome_paciente || "não informado"}\n📱 Telefone: ${telefonePaciente}\n📝 Resumo: ${args.resumo}\n\nPor favor, entre em contato o quanto antes.`;
     await enviarMensagemWhatsApp(CONTATO_GERENCIA.telefone, mensagem);
-    return "Transferido para a Bia com sucesso";
+    return { resultado: "Transferido para a Bia com sucesso", clinicaId: null };
   }
 
-  return "Função desconhecida";
+  return { resultado: "Função desconhecida", clinicaId: null };
 }
 
 // ─── Supabase: buscar e salvar histórico ────────────────────────────────────
@@ -161,9 +175,16 @@ async function buscarHistorico(telefone) {
   }
 }
 
-async function salvarHistorico(telefone, mensagens) {
+async function salvarHistorico(telefone, mensagens, clinicaId = null) {
   try {
     const url = `${SUPABASE_URL}/rest/v1/conversas_agente?on_conflict=telefone`;
+    const corpo = {
+      telefone,
+      mensagens,
+      atualizado_em: new Date().toISOString(),
+    };
+    if (clinicaId) corpo.clinica_id = clinicaId;
+
     await fetch(url, {
       method: "POST",
       headers: {
@@ -172,11 +193,7 @@ async function salvarHistorico(telefone, mensagens) {
         "Content-Type": "application/json",
         Prefer: "resolution=merge-duplicates",
       },
-      body: JSON.stringify({
-        telefone,
-        mensagens,
-        atualizado_em: new Date().toISOString(),
-      }),
+      body: JSON.stringify(corpo),
     });
   } catch (e) {
     console.error("Erro ao salvar histórico:", e);
@@ -210,13 +227,15 @@ async function obterRespostaIA(telefone, mensagemUsuario) {
     let mensagemResposta = data?.choices?.[0]?.message;
     console.log("DEBUG resposta IA:", JSON.stringify(mensagemResposta));
 
-    // Se a IA decidiu chamar uma função (transferir para secretária ou gerência)
+    let clinicaIdDaTransferencia = null;
+
     if (mensagemResposta?.tool_calls?.length > 0) {
       historico.push(mensagemResposta);
 
       for (const toolCall of mensagemResposta.tool_calls) {
         const args = JSON.parse(toolCall.function.arguments || "{}");
-        const resultado = await executarFuncao(toolCall.function.name, args, telefone);
+        const { resultado, clinicaId } = await executarFuncao(toolCall.function.name, args, telefone);
+        if (clinicaId) clinicaIdDaTransferencia = clinicaId;
         historico.push({
           role: "tool",
           tool_call_id: toolCall.id,
@@ -224,7 +243,6 @@ async function obterRespostaIA(telefone, mensagemUsuario) {
         });
       }
 
-      // Segunda chamada, agora com o resultado da função, para gerar a mensagem final ao paciente
       data = await chamarOpenAI(historico);
       mensagemResposta = data?.choices?.[0]?.message;
       console.log("DEBUG resposta final apos tool:", JSON.stringify(mensagemResposta));
@@ -233,7 +251,7 @@ async function obterRespostaIA(telefone, mensagemUsuario) {
     const resposta = mensagemResposta?.content || "Desculpe, tive um probleminha. Pode repetir? 😊";
 
     historico.push({ role: "assistant", content: resposta });
-    await salvarHistorico(telefone, historico);
+    await salvarHistorico(telefone, historico, clinicaIdDaTransferencia);
 
     return resposta;
   } catch (e) {
@@ -296,7 +314,6 @@ function extrairMensagem(body) {
 // ─── Handler principal (Vercel serverless function) ─────────────────────────
 
 export default async function handler(req, res) {
-  // Verificação do webhook (Meta chama isso quando você configura a URL)
   if (req.method === "GET") {
     const mode = req.query["hub.mode"];
     const token = req.query["hub.verify_token"];
@@ -309,7 +326,6 @@ export default async function handler(req, res) {
     return res.status(403).send("Forbidden");
   }
 
-  // Recebimento de mensagens
   if (req.method === "POST") {
     try {
       const body = req.body;
@@ -335,7 +351,6 @@ export default async function handler(req, res) {
 
       const resposta = await obterRespostaIA(telefone, texto);
 
-      // Se a IA decidiu que a conversa já acabou, não manda mensagem nenhuma
       if (resposta.trim() === "FIM_CONVERSA") {
         return res.status(200).json({ status: "conversa encerrada, sem resposta" });
       }
