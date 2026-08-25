@@ -9,9 +9,26 @@ const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
 const SUPABASE_URL = process.env.VITE_SUPABASE_URL;
 const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
-const SYSTEM_PROMPT = `Você faz o atendimento inicial dos Consultórios Odontológicos Dr. Thiago Canuto pelo WhatsApp. NÃO se identifique como robô, inteligência artificial ou "agente virtual" em nenhum momento — cumprimente de forma natural, como uma recepção normal faria.
+// ─── Saudação baseada no horário real de Brasília ───────────────────────────
+// Calculada pelo código (não pela IA), para nunca errar bom dia/tarde/noite.
+
+function obterSaudacao() {
+  const horaBrasilia = parseInt(
+    new Date().toLocaleString("en-US", { timeZone: "America/Sao_Paulo", hour: "numeric", hour12: false }),
+    10
+  );
+  if (horaBrasilia < 12) return "Bom dia";
+  if (horaBrasilia < 18) return "Boa tarde";
+  return "Boa noite";
+}
+
+function construirSystemPrompt(saudacao) {
+  return `Você faz o atendimento inicial dos Consultórios Odontológicos Dr. Thiago Canuto pelo WhatsApp. NÃO se identifique como robô, inteligência artificial ou "agente virtual" em nenhum momento — cumprimente de forma natural, como uma recepção normal faria.
 
 Seu papel é recepcionar os pacientes com simpatia e profissionalismo, entender a necessidade deles, indicar o profissional mais adequado e transferir o atendimento para a secretária da unidade que o paciente escolher, para que ela conclua o agendamento. Você NÃO agenda horários — quem agenda é a secretária de cada unidade.
+
+## SAUDAÇÃO INICIAL (use exatamente esta abertura na primeira mensagem da conversa)
+Comece a primeira mensagem exatamente assim: "${saudacao}! Seja bem-vindo(a) aos Consultórios Odontológicos Dr. Thiago Canuto." — depois disso, pergunte o nome do paciente. Use esse horário de saudação (${saudacao.toLowerCase()}) apenas na primeira mensagem da conversa; não repita esse cumprimento nas mensagens seguintes.
 
 ## EQUIPE DE DENTISTAS
 - Dr. Thiago Canuto → todos os procedimentos + Ortodontia (exclusiva dele)
@@ -51,7 +68,7 @@ IMPORTANTE: NUNCA chame "transferir_para_gerencia" para cancelamento ou remarca�
 Só chame "transferir_para_gerencia" quando o paciente reclamar especificamente de um atendimento, procedimento, cobrança ou profissional — algo que já aconteceu de errado. NÃO tente resolver nem colete dados de agendamento nesse caso. Chame a função com o nome do paciente (se souber) e um resumo da reclamação, e encerre a conversa avisando que a Bia (gerente) vai entrar em contato.
 
 ## FLUXO DE ATENDIMENTO
-1. BOAS-VINDAS: cumprimente com simpatia, dê boas-vindas aos Consultórios Odontológicos Dr. Thiago Canuto com uma saudação normal (NÃO diga que é robô, IA ou agente virtual), e pergunte o nome do paciente.
+1. BOAS-VINDAS: siga exatamente a seção SAUDAÇÃO INICIAL acima, e pergunte o nome do paciente.
 2. IDENTIFICAR A NECESSIDADE: pergunte o que o paciente precisa. Se for atendimento infantil, siga a seção ATENDIMENTO INFANTIL. Se for cancelamento/remarcação, siga a seção específica (sempre secretária). Se for uma nova necessidade odontológica de adulto, use a lista de serviços para entender mesmo descrições informais.
 3. INDICAR O PROFISSIONAL: siga a regra da seção EQUIPE DE DENTISTAS (não se aplica a atendimento infantil, cancelamento ou remarcação).
 4. ESCOLHER A UNIDADE: pergunte em qual das 4 unidades o paciente prefere ser atendido (ou onde a consulta está marcada, no caso de cancelamento/remarcação). Para atendimento infantil, pule esta etapa — já é Largo Dom João.
@@ -73,6 +90,7 @@ Se o paciente mandar uma pergunta nova ou pedir outra coisa depois do encerramen
 - Preste atenção em tudo que já foi dito na conversa antes de perguntar algo — nunca peça de novo uma informação que o paciente já informou
 - NUNCA copie ou repita literalmente o texto técnico que o resultado de uma função retorna (ex: "Transferido para X com sucesso"). Depois de chamar uma função, sempre escreva você mesmo uma mensagem natural e calorosa de encerramento, nunca o texto cru do sistema
 - Nunca se identifique como robô, inteligência artificial, assistente virtual ou "agente virtual" em nenhuma mensagem, mesmo que o paciente pergunte diretamente — nesse caso, apenas responda normalmente como uma recepção faria`;
+}
 
 // ─── Contatos das unidades e da gerência ────────────────────────────────────
 
@@ -202,7 +220,7 @@ async function salvarHistorico(telefone, mensagens, clinicaId = null) {
 
 // ─── OpenAI ──────────────────────────────────────────────────────────────────
 
-async function chamarOpenAI(mensagens) {
+async function chamarOpenAI(mensagens, saudacao) {
   const res = await fetch("https://api.openai.com/v1/chat/completions", {
     method: "POST",
     headers: {
@@ -211,7 +229,7 @@ async function chamarOpenAI(mensagens) {
     },
     body: JSON.stringify({
       model: "gpt-4o-mini",
-      messages: [{ role: "system", content: SYSTEM_PROMPT }, ...mensagens],
+      messages: [{ role: "system", content: construirSystemPrompt(saudacao) }, ...mensagens],
       tools: TOOLS,
     }),
   });
@@ -220,10 +238,11 @@ async function chamarOpenAI(mensagens) {
 
 async function obterRespostaIA(telefone, mensagemUsuario) {
   try {
+    const saudacao = obterSaudacao();
     const historico = await buscarHistorico(telefone);
     historico.push({ role: "user", content: mensagemUsuario });
 
-    let data = await chamarOpenAI(historico);
+    let data = await chamarOpenAI(historico, saudacao);
     let mensagemResposta = data?.choices?.[0]?.message;
     console.log("DEBUG resposta IA:", JSON.stringify(mensagemResposta));
 
@@ -243,7 +262,7 @@ async function obterRespostaIA(telefone, mensagemUsuario) {
         });
       }
 
-      data = await chamarOpenAI(historico);
+      data = await chamarOpenAI(historico, saudacao);
       mensagemResposta = data?.choices?.[0]?.message;
       console.log("DEBUG resposta final apos tool:", JSON.stringify(mensagemResposta));
     }
