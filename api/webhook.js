@@ -10,7 +10,6 @@ const SUPABASE_URL = process.env.VITE_SUPABASE_URL;
 const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
 // ─── Saudação baseada no horário real de Brasília ───────────────────────────
-// Calculada pelo código (não pela IA), para nunca errar bom dia/tarde/noite.
 
 function obterSaudacao() {
   const horaBrasilia = parseInt(
@@ -28,7 +27,7 @@ function construirSystemPrompt(saudacao) {
 Seu papel é recepcionar os pacientes com simpatia e profissionalismo, entender a necessidade deles, indicar o profissional mais adequado e transferir o atendimento para a secretária da unidade que o paciente escolher, para que ela conclua o agendamento. Você NÃO agenda horários — quem agenda é a secretária de cada unidade.
 
 ## SAUDAÇÃO INICIAL (use exatamente esta abertura na primeira mensagem da conversa)
-Comece a primeira mensagem exatamente assim: "${saudacao}! Seja bem-vindo(a) aos Consultórios Odontológicos Dr. Thiago Canuto." — depois disso, pergunte o nome do paciente. Use esse horário de saudação (${saudacao.toLowerCase()}) apenas na primeira mensagem da conversa; não repita esse cumprimento nas mensagens seguintes.
+Comece a primeira mensagem exatamente assim: "${saudacao}! Seja bem-vindo(a) aos Consultórios Odontológicos Dr. Thiago Canuto." — depois disso, pergunte o nome do paciente. Use esse cumprimento apenas na primeira mensagem da conversa; não repita nas mensagens seguintes.
 
 ## EQUIPE DE DENTISTAS
 - Dr. Thiago Canuto → todos os procedimentos + Ortodontia (exclusiva dele)
@@ -175,9 +174,12 @@ async function executarFuncao(nomeFuncao, args, telefonePaciente) {
 
 // ─── Supabase: buscar e salvar histórico ────────────────────────────────────
 
-async function buscarHistorico(telefone) {
+// Busca mensagens E clinica_id — usamos clinica_id como sinal de que a
+// conversa já foi transferida para uma secretária (a partir daí o agente
+// automático para de responder, só a secretária continua pelo sistema).
+async function buscarConversa(telefone) {
   try {
-    const url = `${SUPABASE_URL}/rest/v1/conversas_agente?telefone=eq.${telefone}&select=mensagens`;
+    const url = `${SUPABASE_URL}/rest/v1/conversas_agente?telefone=eq.${telefone}&select=mensagens,clinica_id`;
     const res = await fetch(url, {
       headers: {
         apikey: SUPABASE_SERVICE_ROLE_KEY,
@@ -185,11 +187,13 @@ async function buscarHistorico(telefone) {
       },
     });
     const data = await res.json();
-    if (data && data.length > 0) return data[0].mensagens || [];
-    return [];
+    if (data && data.length > 0) {
+      return { mensagens: data[0].mensagens || [], clinicaId: data[0].clinica_id || null };
+    }
+    return { mensagens: [], clinicaId: null };
   } catch (e) {
-    console.error("Erro ao buscar histórico:", e);
-    return [];
+    console.error("Erro ao buscar conversa:", e);
+    return { mensagens: [], clinicaId: null };
   }
 }
 
@@ -220,6 +224,14 @@ async function salvarHistorico(telefone, mensagens, clinicaId = null) {
 
 // ─── OpenAI ──────────────────────────────────────────────────────────────────
 
+// A OpenAI só aceita os papéis system/user/assistant/tool. Mensagens digitadas
+// pela secretária no sistema ficam salvas com role "secretaria" (para a tela
+// de Conversas exibir com cor própria) — aqui convertemos para "assistant"
+// só na hora de enviar pra IA, sem alterar o que fica salvo no banco.
+function paraFormatoOpenAI(historico) {
+  return historico.map((m) => (m.role === "secretaria" ? { role: "assistant", content: m.content } : m));
+}
+
 async function chamarOpenAI(mensagens, saudacao) {
   const res = await fetch("https://api.openai.com/v1/chat/completions", {
     method: "POST",
@@ -229,17 +241,17 @@ async function chamarOpenAI(mensagens, saudacao) {
     },
     body: JSON.stringify({
       model: "gpt-4o-mini",
-      messages: [{ role: "system", content: construirSystemPrompt(saudacao) }, ...mensagens],
+      messages: [{ role: "system", content: construirSystemPrompt(saudacao) }, ...paraFormatoOpenAI(mensagens)],
       tools: TOOLS,
     }),
   });
   return res.json();
 }
 
-async function obterRespostaIA(telefone, mensagemUsuario) {
+async function obterRespostaIA(telefone, mensagemUsuario, historicoAtual) {
   try {
     const saudacao = obterSaudacao();
-    const historico = await buscarHistorico(telefone);
+    const historico = historicoAtual;
     historico.push({ role: "user", content: mensagemUsuario });
 
     let data = await chamarOpenAI(historico, saudacao);
@@ -357,6 +369,13 @@ export default async function handler(req, res) {
       }
 
       if (texto === "__MIDIA__") {
+        const { mensagens, clinicaId } = await buscarConversa(telefone);
+        if (clinicaId) {
+          // Já transferido: apenas registra, a secretária vê e responde pelo sistema
+          mensagens.push({ role: "user", content: "[mídia recebida]" });
+          await salvarHistorico(telefone, mensagens, clinicaId);
+          return res.status(200).json({ status: "encaminhado para secretaria" });
+        }
         await enviarMensagemWhatsApp(
           telefone,
           "Olá! No momento só consigo receber mensagens de texto. Pode me escrever? 😊"
@@ -368,7 +387,18 @@ export default async function handler(req, res) {
         return res.status(200).json({ status: "ignorado" });
       }
 
-      const resposta = await obterRespostaIA(telefone, texto);
+      const { mensagens, clinicaId } = await buscarConversa(telefone);
+
+      // Conversa já transferida para uma secretária: o agente automático para
+      // de responder. A mensagem só é registrada; quem responde a partir daqui
+      // é a secretária, pelo sistema (aparece na tela dela, com som de aviso).
+      if (clinicaId) {
+        mensagens.push({ role: "user", content: texto });
+        await salvarHistorico(telefone, mensagens, clinicaId);
+        return res.status(200).json({ status: "encaminhado para secretaria, sem resposta automatica" });
+      }
+
+      const resposta = await obterRespostaIA(telefone, texto, mensagens);
 
       if (resposta.trim() === "FIM_CONVERSA") {
         return res.status(200).json({ status: "conversa encerrada, sem resposta" });
