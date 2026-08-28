@@ -139,6 +139,12 @@ export default function Estoque() {
     await carregar()
   }
 
+  async function atualizarQuantidadeMinima(id: string, novaQtdMinima: number) {
+    if (novaQtdMinima < 0) return
+    await supabase.from('estoque').update({ quantidade_minima: novaQtdMinima }).eq('id', id)
+    await carregar()
+  }
+
   function getStatus(item: any) {
     if (item.quantidade === 0) return { label: 'Crítico', cor: 'text-red-400 bg-red-900/30' }
     if (item.quantidade <= item.quantidade_minima) return { label: 'Baixo', cor: 'text-yellow-400 bg-yellow-900/30' }
@@ -229,10 +235,11 @@ export default function Estoque() {
                   <th className="text-left text-gray-500 text-xs px-4 py-3">Item</th>
                   <th className="text-left text-gray-500 text-xs px-4 py-3">Clínica</th>
                   <th className="text-center text-gray-500 text-xs px-4 py-3">Qtd atual</th>
+                  <th className="text-center text-gray-500 text-xs px-4 py-3">Ajustar atual</th>
                   <th className="text-center text-gray-500 text-xs px-4 py-3">Qtd mínima</th>
+                  <th className="text-center text-gray-500 text-xs px-4 py-3">Ajustar mínima</th>
                   <th className="text-left text-gray-500 text-xs px-4 py-3">Unidade</th>
                   <th className="text-center text-gray-500 text-xs px-4 py-3">Status</th>
-                  <th className="text-center text-gray-500 text-xs px-4 py-3">Ajustar</th>
                   <th className="text-center text-gray-500 text-xs px-4 py-3">Saída</th>
                 </tr>
               </thead>
@@ -248,11 +255,6 @@ export default function Estoque() {
                           {item.quantidade}
                         </span>
                       </td>
-                      <td className="px-4 py-3 text-center text-gray-500 text-sm">{item.quantidade_minima}</td>
-                      <td className="px-4 py-3 text-gray-400 text-sm">{item.unidade || '—'}</td>
-                      <td className="px-4 py-3 text-center">
-                        <span className={`text-xs font-semibold px-2 py-1 rounded-full ${status.cor}`}>{status.label}</span>
-                      </td>
                       <td className="px-4 py-3">
                         <div className="flex items-center justify-center gap-2">
                           <button onClick={() => atualizarQuantidade(item.id, item.quantidade - 1)}
@@ -260,6 +262,19 @@ export default function Estoque() {
                           <button onClick={() => atualizarQuantidade(item.id, item.quantidade + 1)}
                             className="w-6 h-6 bg-green-800 hover:bg-green-700 text-white rounded text-sm transition-colors">+</button>
                         </div>
+                      </td>
+                      <td className="px-4 py-3 text-center text-gray-300 text-sm">{item.quantidade_minima}</td>
+                      <td className="px-4 py-3">
+                        <div className="flex items-center justify-center gap-2">
+                          <button onClick={() => atualizarQuantidadeMinima(item.id, item.quantidade_minima - 1)}
+                            className="w-6 h-6 bg-gray-800 hover:bg-gray-700 text-white rounded text-sm transition-colors">−</button>
+                          <button onClick={() => atualizarQuantidadeMinima(item.id, item.quantidade_minima + 1)}
+                            className="w-6 h-6 bg-blue-800 hover:bg-blue-700 text-white rounded text-sm transition-colors">+</button>
+                        </div>
+                      </td>
+                      <td className="px-4 py-3 text-gray-400 text-sm">{item.unidade || '—'}</td>
+                      <td className="px-4 py-3 text-center">
+                        <span className={`text-xs font-semibold px-2 py-1 rounded-full ${status.cor}`}>{status.label}</span>
                       </td>
                       <td className="px-4 py-3 text-center">
                         <button
