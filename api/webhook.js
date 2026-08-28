@@ -44,6 +44,9 @@ Exodontia simples, Exodontia de 3º molar, Exodontia de 3º molar incluso, Frene
 
 Use esta lista para reconhecer o que o paciente quer, mesmo que ele descreva com outras palavras (ex: "colocar aparelho" = Ortodontia; "dor no dente" pode ser Canal ou Exodontia; "clarear os dentes" = Clareamento). Nunca invente um serviço que não está nesta lista.
 
+## UNIDADES — TODAS ATENDEM ADULTOS NORMALMENTE
+As 4 unidades (Bom Jesus, Largo Dom João, Palha, Rio Grande) atendem pacientes adultos normalmente, para QUALQUER procedimento da lista de serviços. Isso inclui o Largo Dom João: ele NÃO é exclusivo para crianças — atende adultos normalmente também. A seção ATENDIMENTO INFANTIL abaixo só direciona automaticamente pacientes infantis para essa unidade; ela nunca é motivo para recusar ou redirecionar um pedido de adulto que já escolheu o Largo Dom João. Se um paciente adulto pedir para ser atendido no Largo Dom João, prossiga normalmente com a transferência para essa unidade, exatamente como faria para qualquer outra.
+
 ## ATENDIMENTO INFANTIL (ODONTOPEDIATRIA)
 Se o paciente disser que o atendimento é para uma criança, ou pedir especificamente odontopediatria, NÃO pergunte a unidade — indique diretamente que o atendimento infantil é feito na unidade Largo Dom João (secretárias Adriana e Luziane) e siga direto para a confirmação da transferência com essa unidade.
 
@@ -53,6 +56,8 @@ Para os demais casos (atendimento de adulto), depois de identificar a necessidad
 - Largo Dom João (secretárias Adriana e Luziane)
 - Palha (secretária Elaine)
 - Rio Grande (secretária Débora)
+
+Se o paciente já disser de cara em qual unidade quer ser atendido (incluindo Largo Dom João), não pergunte de novo — apenas confirme e prossiga.
 
 Quando o paciente escolher a unidade, informe o nome da secretária responsável, diga que vai transferir o atendimento para ela dar continuidade ao agendamento, e pergunte se ele confirma. NÃO revele o número de telefone da secretária na mensagem — o sistema cuida da transferência internamente.
 
@@ -70,7 +75,7 @@ Só chame "transferir_para_gerencia" quando o paciente reclamar especificamente 
 1. BOAS-VINDAS: siga exatamente a seção SAUDAÇÃO INICIAL acima, e pergunte o nome do paciente.
 2. IDENTIFICAR A NECESSIDADE: pergunte o que o paciente precisa. Se for atendimento infantil, siga a seção ATENDIMENTO INFANTIL. Se for cancelamento/remarcação, siga a seção específica (sempre secretária). Se for uma nova necessidade odontológica de adulto, use a lista de serviços para entender mesmo descrições informais.
 3. INDICAR O PROFISSIONAL: siga a regra da seção EQUIPE DE DENTISTAS (não se aplica a atendimento infantil, cancelamento ou remarcação).
-4. ESCOLHER A UNIDADE: pergunte em qual das 4 unidades o paciente prefere ser atendido (ou onde a consulta está marcada, no caso de cancelamento/remarcação). Para atendimento infantil, pule esta etapa — já é Largo Dom João.
+4. ESCOLHER A UNIDADE: pergunte em qual das 4 unidades o paciente prefere ser atendido (ou onde a consulta está marcada, no caso de cancelamento/remarcação) — a menos que o paciente já tenha dito qual unidade prefere, incluindo Largo Dom João, que atende adultos normalmente. Para atendimento infantil, pule esta etapa — já é Largo Dom João.
 5. TRANSFERIR: informe a secretária responsável pela unidade escolhida e pergunte se o paciente confirma. Ao confirmar, chame a função "transferir_para_secretaria".
 6. ENCERRAMENTO: após chamar a função, agradeça calorosamente e finalize a mensagem com 🦷💚
 
@@ -88,7 +93,8 @@ Se o paciente mandar uma pergunta nova ou pedir outra coisa depois do encerramen
 - Depois de chamar a função de transferência, apenas agradeça e encerre a conversa com a despedida. NUNCA reinicie a conversa nem repita perguntas que já foram respondidas antes
 - Preste atenção em tudo que já foi dito na conversa antes de perguntar algo — nunca peça de novo uma informação que o paciente já informou
 - NUNCA copie ou repita literalmente o texto técnico que o resultado de uma função retorna (ex: "Transferido para X com sucesso"). Depois de chamar uma função, sempre escreva você mesmo uma mensagem natural e calorosa de encerramento, nunca o texto cru do sistema
-- Nunca se identifique como robô, inteligência artificial, assistente virtual ou "agente virtual" em nenhuma mensagem, mesmo que o paciente pergunte diretamente — nesse caso, apenas responda normalmente como uma recepção faria`;
+- Nunca se identifique como robô, inteligência artificial, assistente virtual ou "agente virtual" em nenhuma mensagem, mesmo que o paciente pergunte diretamente — nesse caso, apenas responda normalmente como uma recepção faria
+- NUNCA recuse ou redirecione um pedido de adulto no Largo Dom João dizendo que a unidade só atende crianças — isso está errado, a unidade atende adultos normalmente`;
 }
 
 // ─── Contatos das unidades e da gerência ────────────────────────────────────
@@ -120,7 +126,7 @@ const TOOLS = [
     type: "function",
     function: {
       name: "transferir_para_secretaria",
-      description: "Transfere o atendimento para a secretária da unidade escolhida, enviando uma mensagem de WhatsApp para ela com os dados do paciente. Use para novos agendamentos, atendimento infantil (sempre Largo Dom João) E TAMBÉM para cancelamentos ou remarcações de consulta.",
+      description: "Transfere o atendimento para a secretária da unidade escolhida, enviando uma mensagem de WhatsApp para ela com os dados do paciente. Use para novos agendamentos (adultos em qualquer uma das 4 unidades, incluindo Largo Dom João), atendimento infantil (sempre Largo Dom João) E TAMBÉM para cancelamentos ou remarcações de consulta.",
       parameters: {
         type: "object",
         properties: {
@@ -371,7 +377,6 @@ export default async function handler(req, res) {
       if (texto === "__MIDIA__") {
         const { mensagens, clinicaId } = await buscarConversa(telefone);
         if (clinicaId) {
-          // Já transferido: apenas registra, a secretária vê e responde pelo sistema
           mensagens.push({ role: "user", content: "[mídia recebida]" });
           await salvarHistorico(telefone, mensagens, clinicaId);
           return res.status(200).json({ status: "encaminhado para secretaria" });
@@ -389,9 +394,6 @@ export default async function handler(req, res) {
 
       const { mensagens, clinicaId } = await buscarConversa(telefone);
 
-      // Conversa já transferida para uma secretária: o agente automático para
-      // de responder. A mensagem só é registrada; quem responde a partir daqui
-      // é a secretária, pelo sistema (aparece na tela dela, com som de aviso).
       if (clinicaId) {
         mensagens.push({ role: "user", content: texto });
         await salvarHistorico(telefone, mensagens, clinicaId);
