@@ -17,6 +17,7 @@ import RelatorioDiario from '../pages/RelatorioDiario'
 import Usuarios from '../pages/Usuarios'
 import Implantes from '../pages/Implantes'
 import ConversasWhatsApp from '../pages/ConversasWhatsApp'
+import DisparoMassa from '../pages/DisparoMassa'
 
 const SECOES = [
   {
@@ -57,6 +58,7 @@ const SECOES = [
     itens: [
       { path: '/clinicas', label: 'Clínicas', icon: '🏥' },
       { path: '/usuarios', label: 'Usuários', icon: '🔐' },
+      { path: '/disparo', label: 'Disparo em Massa', icon: '📢' },
     ]
   },
 ]
@@ -159,6 +161,7 @@ export default function Layout() {
             <Route path="/usuarios" element={<Usuarios />} />
             <Route path="/implantes" element={<Implantes />} />
             <Route path="/conversas" element={<ConversasWhatsApp />} />
+            <Route path="/disparo" element={<DisparoMassa />} />
           </Routes>
         </div>
       </div>
