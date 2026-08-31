@@ -6,7 +6,7 @@ export default function Implantes() {
   const [pacientes, setPacientes] = useState<any[]>([])
   const [dentistas, setDentistas] = useState<any[]>([])
   const [clinicas, setClinicas] = useState<any[]>([])
-  const [proteticos, setProteticos] = useState<any[]>([])
+  const [pagosPorImplante, setPagosPorImplante] = useState<Record<string, number>>({})
   const [loading, setLoading] = useState(true)
   const [modalAberto, setModalAberto] = useState(false)
   const [modalParcela, setModalParcela] = useState(false)
@@ -14,12 +14,13 @@ export default function Implantes() {
   const [parcelas, setParcelas] = useState<any[]>([])
   const [salvando, setSalvando] = useState(false)
   const [filtroStatus, setFiltroStatus] = useState('')
+  const [filtroRetorno, setFiltroRetorno] = useState<number | ''>('')
   const [clinicaIdUsuario, setClinicaIdUsuario] = useState<string | null>(null)
   const [perfilAdmin, setPerfilAdmin] = useState(true)
 
   const [form, setForm] = useState({
     paciente_id: '', dentista_id: '', clinica_id: '',
-    protetico_id: '', descricao: '', valor_total: '',
+    descricao: '', valor_total: '',
     data_inicio: new Date().toISOString().split('T')[0],
     observacoes: '', status: 'em_andamento'
   })
@@ -50,22 +51,35 @@ export default function Implantes() {
   async function carregar() {
     setLoading(true)
     let query = supabase.from('implantes')
-      .select('*, pacientes(nome, telefone), dentistas(nome), clinicas(nome), proteticos(nome)')
+      .select('*, pacientes(nome, telefone), dentistas(nome), clinicas(nome)')
       .order('created_at', { ascending: false })
     if (clinicaIdUsuario) query = query.eq('clinica_id', clinicaIdUsuario)
 
-    const [{ data: imp }, { data: pac }, { data: den }, { data: cli }, { data: pro }] = await Promise.all([
+    const [{ data: imp }, { data: pac }, { data: den }, { data: cli }] = await Promise.all([
       query,
       supabase.from('pacientes').select('id, nome').order('nome'),
       supabase.from('dentistas').select('id, nome'),
       supabase.from('clinicas').select('id, nome'),
-      supabase.from('proteticos').select('id, nome'),
     ])
-    if (imp) setImplantes(imp)
+    if (imp) {
+      setImplantes(imp)
+      if (imp.length > 0) {
+        const { data: todasParcelas } = await supabase
+          .from('implante_parcelas')
+          .select('implante_id, valor')
+          .in('implante_id', imp.map((i: any) => i.id))
+        const somas: Record<string, number> = {}
+        ;(todasParcelas || []).forEach((p: any) => {
+          somas[p.implante_id] = (somas[p.implante_id] || 0) + parseFloat(p.valor)
+        })
+        setPagosPorImplante(somas)
+      } else {
+        setPagosPorImplante({})
+      }
+    }
     if (pac) setPacientes(pac)
     if (den) setDentistas(den)
     if (cli) setClinicas(cli)
-    if (pro) setProteticos(pro)
     setLoading(false)
   }
 
@@ -82,24 +96,21 @@ export default function Implantes() {
     setSalvando(true)
     const valorTotal = parseFloat(form.valor_total)
     const comissaoDentista = valorTotal * 0.40
-    const comissaoProtetico = form.protetico_id ? valorTotal * 0.40 : 0
 
     const { error } = await supabase.from('implantes').insert([{
       paciente_id: form.paciente_id,
       dentista_id: form.dentista_id,
       clinica_id: form.clinica_id,
-      protetico_id: form.protetico_id || null,
       descricao: form.descricao || null,
       valor_total: valorTotal,
       data_inicio: form.data_inicio,
       observacoes: form.observacoes || null,
       status: 'em_andamento',
       comissao_dentista: comissaoDentista,
-      comissao_protetico: comissaoProtetico,
     }])
     if (error) { alert('Erro: ' + error.message); setSalvando(false); return }
     setModalAberto(false)
-    setForm({ paciente_id: '', dentista_id: '', clinica_id: clinicaIdUsuario || '', protetico_id: '', descricao: '', valor_total: '', data_inicio: new Date().toISOString().split('T')[0], observacoes: '', status: 'em_andamento' })
+    setForm({ paciente_id: '', dentista_id: '', clinica_id: clinicaIdUsuario || '', descricao: '', valor_total: '', data_inicio: new Date().toISOString().split('T')[0], observacoes: '', status: 'em_andamento' })
     await carregar()
     setSalvando(false)
   }
@@ -117,7 +128,6 @@ export default function Implantes() {
     }])
     if (error) { alert('Erro: ' + error.message); setSalvando(false); return }
 
-    // Registra no financeiro
     const pct = (formParcela.forma_pagamento === 'Dinheiro' || formParcela.forma_pagamento === 'Cheque') ? 40 : 36
     await supabase.from('atendimentos').insert([{
       paciente_id: implanteSelecionado.paciente_id,
@@ -135,8 +145,7 @@ export default function Implantes() {
     setFormParcela({ data_pagamento: new Date().toISOString().split('T')[0], valor: '', forma_pagamento: '', observacoes: '' })
     const { data } = await supabase.from('implante_parcelas').select('*').eq('implante_id', implanteSelecionado.id).order('data_pagamento')
     if (data) setParcelas(data)
-    // Atualiza o implante selecionado
-    const { data: imp } = await supabase.from('implantes').select('*, pacientes(nome, telefone), dentistas(nome), clinicas(nome), proteticos(nome)').eq('id', implanteSelecionado.id).single()
+    const { data: imp } = await supabase.from('implantes').select('*, pacientes(nome, telefone), dentistas(nome), clinicas(nome)').eq('id', implanteSelecionado.id).single()
     if (imp) setImplanteSelecionado(imp)
     await carregar()
     setSalvando(false)
@@ -156,17 +165,44 @@ export default function Implantes() {
     return nome?.split(' ').slice(0, 2).map(n => n[0]).join('').toUpperCase()
   }
 
+  function diasParaRetorno(dataInicio: string, diasRetorno: number) {
+    const inicio = new Date(dataInicio + 'T12:00:00')
+    const alvo = new Date(inicio)
+    alvo.setDate(alvo.getDate() + diasRetorno)
+    const hoje = new Date()
+    hoje.setHours(12, 0, 0, 0)
+    const diffMs = alvo.getTime() - hoje.getTime()
+    return Math.round(diffMs / (1000 * 60 * 60 * 24))
+  }
+
+  function labelRetorno(dias: number) {
+    if (dias === 0) return { texto: 'Retorno é hoje!', cor: 'text-red-400' }
+    if (dias < 0) return { texto: `Atrasado ${Math.abs(dias)} dia(s)`, cor: 'text-red-400' }
+    if (dias <= 3) return { texto: `Faltam ${dias} dia(s)`, cor: 'text-yellow-400' }
+    return { texto: `Faltam ${dias} dia(s)`, cor: 'text-gray-400' }
+  }
+
   const STATUS = [
     { value: 'em_andamento', label: 'Em andamento', cor: 'bg-blue-900/30 text-blue-400 border-blue-800' },
     { value: 'concluido', label: 'Concluído', cor: 'bg-green-900/30 text-green-400 border-green-800' },
     { value: 'cancelado', label: 'Cancelado', cor: 'bg-red-900/30 text-red-400 border-red-800' },
   ]
 
+  const OPCOES_RETORNO = [30, 60, 90, 180]
+
   function getStatus(s: string) {
     return STATUS.find(st => st.value === s) ?? STATUS[0]
   }
 
-  const implantesFiltrados = filtroStatus ? implantes.filter(i => i.status === filtroStatus) : implantes
+  let implantesFiltrados = filtroStatus ? implantes.filter(i => i.status === filtroStatus) : implantes
+
+  if (filtroRetorno) {
+    implantesFiltrados = implantesFiltrados
+      .filter(i => i.status !== 'cancelado')
+      .slice()
+      .sort((a, b) => diasParaRetorno(a.data_inicio, filtroRetorno) - diasParaRetorno(b.data_inicio, filtroRetorno))
+  }
+
   const totalValor = implantes.reduce((acc, i) => acc + (parseFloat(i.valor_total) || 0), 0)
 
   return (
@@ -182,8 +218,7 @@ export default function Implantes() {
         </button>
       </div>
 
-      {/* Filtro status */}
-      <div className="flex gap-2 mb-6 flex-wrap">
+      <div className="flex gap-2 mb-3 flex-wrap">
         <button onClick={() => setFiltroStatus('')}
           className={`px-4 py-2 rounded-lg text-sm font-semibold transition-colors border ${!filtroStatus ? 'bg-gray-700 border-gray-600 text-white' : 'bg-gray-900 border-gray-800 text-gray-400'}`}>
           Todos ({implantes.length})
@@ -194,6 +229,19 @@ export default function Implantes() {
             {s.label} ({implantes.filter(i => i.status === s.value).length})
           </button>
         ))}
+      </div>
+
+      <div className="flex items-center gap-2 mb-6 flex-wrap">
+        <span className="text-gray-500 text-xs font-medium">📅 Retorno:</span>
+        {OPCOES_RETORNO.map(dias => (
+          <button key={dias} onClick={() => setFiltroRetorno(filtroRetorno === dias ? '' : dias)}
+            className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors border ${filtroRetorno === dias ? 'bg-purple-900/40 border-purple-700 text-purple-300' : 'bg-gray-900 border-gray-800 text-gray-400'}`}>
+            {dias} dias
+          </button>
+        ))}
+        {filtroRetorno && (
+          <button onClick={() => setFiltroRetorno('')} className="text-gray-500 hover:text-white text-xs">× limpar</button>
+        )}
       </div>
 
       {loading ? (
@@ -207,6 +255,10 @@ export default function Implantes() {
         <div className="space-y-3">
           {implantesFiltrados.map((imp) => {
             const st = getStatus(imp.status)
+            const pago = pagosPorImplante[imp.id] || 0
+            const total = parseFloat(imp.valor_total) || 0
+            const restante = total - pago
+            const retorno = filtroRetorno ? labelRetorno(diasParaRetorno(imp.data_inicio, filtroRetorno)) : null
             return (
               <div key={imp.id}
                 onClick={() => abrirImplante(imp)}
@@ -221,27 +273,34 @@ export default function Implantes() {
                       <div className="text-gray-500 text-xs mt-0.5">
                         👨‍⚕️ {imp.dentistas?.nome} · 🏥 {imp.clinicas?.nome}
                       </div>
-                      {imp.proteticos?.nome && (
-                        <div className="text-gray-500 text-xs">🔧 Protético: {imp.proteticos.nome}</div>
-                      )}
                       {imp.descricao && <div className="text-gray-400 text-xs mt-0.5">{imp.descricao}</div>}
+                      {retorno && (
+                        <div className={`text-xs mt-1 font-semibold ${retorno.cor}`}>
+                          🗓️ Retorno de {filtroRetorno} dias: {retorno.texto}
+                        </div>
+                      )}
                     </div>
                   </div>
                   <div className="text-right flex-shrink-0">
                     <span className={`text-xs px-2 py-0.5 rounded border font-medium ${st.cor}`}>{st.label}</span>
-                    <div className="text-white font-bold mt-1">{fmt(parseFloat(imp.valor_total))}</div>
+                    <div className="text-white font-bold mt-1">{fmt(total)}</div>
                     <div className="text-xs text-gray-500 mt-0.5">
                       Início: {new Date(imp.data_inicio).toLocaleDateString('pt-BR')}
                     </div>
                   </div>
                 </div>
 
-                {/* Barra de progresso */}
-                <div className="mt-3">
-                  <div className="flex justify-between text-xs text-gray-500 mb-1">
-                    <span>Comissão dentista (40%): {fmt(parseFloat(imp.valor_total) * 0.40)}</span>
-                    {imp.proteticos?.nome && <span>Protético (40%): {fmt(parseFloat(imp.valor_total) * 0.40)}</span>}
-                  </div>
+                <div className="mt-3 flex items-center justify-between text-xs">
+                  <span className="text-gray-500">
+                    Comissão dentista (40%): {fmt(total * 0.40)}
+                  </span>
+                  <span>
+                    <span className="text-green-400 font-semibold">Pago: {fmt(pago)}</span>
+                    <span className="text-gray-600 mx-1.5">·</span>
+                    <span className={`font-semibold ${restante > 0 ? 'text-red-400' : 'text-green-400'}`}>
+                      Restante: {fmt(restante)}
+                    </span>
+                  </span>
                 </div>
               </div>
             )
@@ -249,7 +308,6 @@ export default function Implantes() {
         </div>
       )}
 
-      {/* MODAL DETALHE DO IMPLANTE */}
       {implanteSelecionado && (
         <div className="fixed inset-0 bg-black/70 z-50 flex items-center justify-center p-4">
           <div className="bg-gray-900 border border-gray-800 rounded-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto">
@@ -258,14 +316,12 @@ export default function Implantes() {
                 <h3 className="text-white font-bold">🦷 Implante — {implanteSelecionado.pacientes?.nome}</h3>
                 <p className="text-gray-500 text-xs mt-0.5">
                   {implanteSelecionado.dentistas?.nome} · {implanteSelecionado.clinicas?.nome}
-                  {implanteSelecionado.proteticos?.nome && ` · Protético: ${implanteSelecionado.proteticos.nome}`}
                 </p>
               </div>
               <button onClick={() => { setImplanteSelecionado(null); setParcelas([]) }} className="text-gray-500 hover:text-white text-xl">×</button>
             </div>
 
             <div className="p-5">
-              {/* Resumo financeiro */}
               <div className="grid grid-cols-3 gap-3 mb-5">
                 <div className="bg-gray-800 rounded-lg p-3 text-center">
                   <div className="text-gray-500 text-xs mb-1">Valor total</div>
@@ -283,24 +339,29 @@ export default function Implantes() {
                 </div>
               </div>
 
-              {/* Comissões */}
               <div className="bg-yellow-900/20 border border-yellow-800/40 rounded-lg p-3 mb-5">
-                <p className="text-yellow-400 text-xs font-semibold mb-2">💰 Comissões (40% sobre valor total)</p>
-                <div className="flex gap-4">
-                  <div>
-                    <span className="text-gray-400 text-xs">Dentista ({implanteSelecionado.dentistas?.nome}): </span>
-                    <span className="text-yellow-400 font-bold text-sm">{fmt(parseFloat(implanteSelecionado.valor_total) * 0.40)}</span>
-                  </div>
-                  {implanteSelecionado.proteticos?.nome && (
-                    <div>
-                      <span className="text-gray-400 text-xs">Protético ({implanteSelecionado.proteticos.nome}): </span>
-                      <span className="text-yellow-400 font-bold text-sm">{fmt(parseFloat(implanteSelecionado.valor_total) * 0.40)}</span>
-                    </div>
-                  )}
+                <p className="text-yellow-400 text-xs font-semibold mb-2">💰 Comissão (40% sobre valor total)</p>
+                <div>
+                  <span className="text-gray-400 text-xs">Dentista ({implanteSelecionado.dentistas?.nome}): </span>
+                  <span className="text-yellow-400 font-bold text-sm">{fmt(parseFloat(implanteSelecionado.valor_total) * 0.40)}</span>
                 </div>
               </div>
 
-              {/* Status */}
+              <div className="bg-purple-900/20 border border-purple-800/40 rounded-lg p-3 mb-5">
+                <p className="text-purple-400 text-xs font-semibold mb-2">📅 Retornos (a partir do início em {new Date(implanteSelecionado.data_inicio).toLocaleDateString('pt-BR')})</p>
+                <div className="grid grid-cols-4 gap-2">
+                  {OPCOES_RETORNO.map(dias => {
+                    const r = labelRetorno(diasParaRetorno(implanteSelecionado.data_inicio, dias))
+                    return (
+                      <div key={dias} className="text-center">
+                        <div className="text-gray-500 text-xs">{dias} dias</div>
+                        <div className={`text-xs font-semibold ${r.cor}`}>{r.texto}</div>
+                      </div>
+                    )
+                  })}
+                </div>
+              </div>
+
               <div className="flex items-center gap-3 mb-5">
                 <span className="text-gray-400 text-xs">Status:</span>
                 <div className="flex gap-2">
@@ -314,9 +375,8 @@ export default function Implantes() {
                 </div>
               </div>
 
-              {/* Parcelas */}
               <div className="flex items-center justify-between mb-3">
-                <h4 className="text-white font-semibold text-sm">Parcelas pagas ({parcelas.length})</h4>
+                <h4 className="text-white font-semibold text-sm">Abatimentos / parcelas pagas ({parcelas.length})</h4>
                 <button onClick={() => setModalParcela(true)}
                   className="bg-green-700 hover:bg-green-600 text-white text-xs px-3 py-1.5 rounded-lg font-semibold">
                   + Registrar parcela
@@ -374,7 +434,6 @@ export default function Implantes() {
         </div>
       )}
 
-      {/* MODAL PARCELA */}
       {modalParcela && (
         <div className="fixed inset-0 bg-black/80 z-[60] flex items-center justify-center p-4">
           <div className="bg-gray-900 border border-gray-800 rounded-2xl w-full max-w-md">
@@ -434,7 +493,6 @@ export default function Implantes() {
         </div>
       )}
 
-      {/* MODAL NOVO IMPLANTE */}
       {modalAberto && (
         <div className="fixed inset-0 bg-black/70 z-50 flex items-center justify-center p-4">
           <div className="bg-gray-900 border border-gray-800 rounded-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto">
@@ -476,14 +534,6 @@ export default function Implantes() {
                 </div>
               </div>
               <div>
-                <label className="text-gray-400 text-xs block mb-1">Protético (40% sobre valor total)</label>
-                <select value={form.protetico_id} onChange={e => setForm({...form, protetico_id: e.target.value})}
-                  className="w-full bg-gray-800 border border-gray-700 text-white rounded-lg px-3 py-2 text-sm focus:outline-none">
-                  <option value="">Selecione o protético...</option>
-                  {proteticos.map(p => <option key={p.id} value={p.id}>{p.nome}</option>)}
-                </select>
-              </div>
-              <div>
                 <label className="text-gray-400 text-xs block mb-1">Descrição</label>
                 <input value={form.descricao} onChange={e => setForm({...form, descricao: e.target.value})}
                   placeholder="Ex: Implante unitário dente 36..."
@@ -504,9 +554,8 @@ export default function Implantes() {
               </div>
               {form.valor_total && (
                 <div className="bg-yellow-900/20 border border-yellow-800/40 rounded-lg p-3 text-xs">
-                  <div className="text-yellow-400 font-semibold mb-1">💰 Comissões calculadas (40%)</div>
+                  <div className="text-yellow-400 font-semibold mb-1">💰 Comissão calculada (40%)</div>
                   <div className="text-gray-300">Dentista: {(parseFloat(form.valor_total) * 0.40).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</div>
-                  {form.protetico_id && <div className="text-gray-300">Protético: {(parseFloat(form.valor_total) * 0.40).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</div>}
                 </div>
               )}
               <div>
