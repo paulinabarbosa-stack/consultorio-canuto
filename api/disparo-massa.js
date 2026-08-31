@@ -41,17 +41,28 @@ async function validarUsuarioAdmin(authHeader) {
 }
 
 async function buscarTodosTelefones() {
-  const url = `${SUPABASE_URL}/rest/v1/pacientes?select=telefone&telefone=not.is.null`;
-  const res = await fetch(url, {
-    headers: {
-      apikey: SUPABASE_SERVICE_ROLE_KEY,
-      Authorization: `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
-    },
-  });
-  const data = await res.json();
-  const telefones = (data || [])
-    .map((d) => normalizarTelefone(d.telefone))
+  const urlPacientes = `${SUPABASE_URL}/rest/v1/pacientes?select=telefone&telefone=not.is.null`;
+  const urlConversas = `${SUPABASE_URL}/rest/v1/conversas_agente?select=telefone`;
+
+  const headers = {
+    apikey: SUPABASE_SERVICE_ROLE_KEY,
+    Authorization: `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
+  };
+
+  const [resPacientes, resConversas] = await Promise.all([
+    fetch(urlPacientes, { headers }),
+    fetch(urlConversas, { headers }),
+  ]);
+  const dadosPacientes = await resPacientes.json();
+  const dadosConversas = await resConversas.json();
+
+  const telefones = [
+    ...(dadosPacientes || []).map((d) => d.telefone),
+    ...(dadosConversas || []).map((d) => d.telefone),
+  ]
+    .map(normalizarTelefone)
     .filter(Boolean);
+
   return [...new Set(telefones)];
 }
 
@@ -95,13 +106,16 @@ export default async function handler(req, res) {
     return res.status(401).json({ erro: "Não autorizado. Apenas administrador/gerente podem enviar disparos em massa." });
   }
 
-  const { mensagem } = req.body || {};
+  const { mensagem, limite } = req.body || {};
   if (!mensagem || !mensagem.trim()) {
     return res.status(400).json({ erro: "Mensagem é obrigatória." });
   }
 
   try {
-    const telefones = await buscarTodosTelefones();
+    let telefones = await buscarTodosTelefones();
+    if (limite && Number(limite) > 0) {
+      telefones = telefones.slice(0, Number(limite));
+    }
     const resultados = [];
 
     for (const telefone of telefones) {

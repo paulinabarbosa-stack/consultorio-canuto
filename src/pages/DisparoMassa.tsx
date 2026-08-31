@@ -7,19 +7,24 @@ export default function DisparoMassa() {
   const [enviando, setEnviando] = useState(false)
   const [resultado, setResultado] = useState<any>(null)
   const [erro, setErro] = useState('')
+  const [modoTeste, setModoTeste] = useState(true)
 
   useEffect(() => {
     async function contarContatos() {
-      const { data } = await supabase.from('pacientes').select('telefone').not('telefone', 'is', null)
-      if (data) {
-        const unicos = new Set(
-          data
-            .map((d: any) => (d.telefone || '').replace(/\D/g, ''))
-            .filter(Boolean)
-            .map((n: string) => (n.startsWith('55') ? n : `55${n}`))
-        )
-        setTotalContatos(unicos.size)
+      const [{ data: pacientesData }, { data: conversasData }] = await Promise.all([
+        supabase.from('pacientes').select('telefone').not('telefone', 'is', null),
+        supabase.from('conversas_agente').select('telefone'),
+      ])
+      const normalizar = (t: string) => {
+        const n = (t || '').replace(/\D/g, '')
+        return n ? (n.startsWith('55') ? n : `55${n}`) : ''
       }
+      const unicos = new Set(
+        [...(pacientesData || []), ...(conversasData || [])]
+          .map((d: any) => normalizar(d.telefone))
+          .filter(Boolean)
+      )
+      setTotalContatos(unicos.size)
     }
     contarContatos()
   }, [])
@@ -29,8 +34,13 @@ export default function DisparoMassa() {
     setResultado(null)
     if (!mensagem.trim()) { setErro('Digite a mensagem antes de enviar.'); return }
 
+    const limite = modoTeste ? 20 : undefined
+    const alvoTexto = modoTeste
+      ? `um teste com até ${limite} contatos`
+      : `TODOS os ${totalContatos ?? '...'} contatos`
+
     const confirmar = confirm(
-      `Tem certeza que deseja enviar essa mensagem para TODOS os ${totalContatos ?? '...'} contatos? Essa ação não pode ser desfeita.`
+      `Tem certeza que deseja enviar essa mensagem para ${alvoTexto}? Essa ação não pode ser desfeita.`
     )
     if (!confirmar) return
 
@@ -43,7 +53,7 @@ export default function DisparoMassa() {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${session?.access_token ?? ''}`,
         },
-        body: JSON.stringify({ mensagem: mensagem.trim() }),
+        body: JSON.stringify({ mensagem: mensagem.trim(), limite }),
       })
       const data = await res.json()
       if (!res.ok || data?.erro) {
@@ -63,7 +73,7 @@ export default function DisparoMassa() {
       <div className="mb-6">
         <h2 className="text-white text-lg font-bold">📢 Disparo em Massa</h2>
         <p className="text-gray-500 text-sm mt-1">
-          Envia uma mensagem para todos os pacientes cadastrados no sistema.
+          Envia uma mensagem para todos os pacientes cadastrados e para quem já conversou com o agente pelo WhatsApp.
         </p>
       </div>
 
@@ -74,14 +84,31 @@ export default function DisparoMassa() {
           Contatos mais antigos podem não receber (a mensagem falha silenciosamente para eles) — o
           relatório no final mostra exatamente quem recebeu e quem não recebeu.
         </p>
+        <p className="text-gray-300 mt-2">
+          Enviar para muitos números de uma vez pode reduzir a nota de qualidade do WhatsApp ou até
+          bloquear temporariamente o número, caso muitos denunciem como spam. Use o modo teste primeiro
+          e, para enviar sem esse risco pra todo mundo, o ideal é usar um Template aprovado pela Meta.
+        </p>
       </div>
 
       <div className="bg-gray-900 border border-gray-800 rounded-xl p-5 mb-5">
-        <div className="text-gray-400 text-sm mb-3">
-          {totalContatos === null ? 'Carregando contatos...' : (
-            <>📇 <span className="text-white font-semibold">{totalContatos}</span> pacientes com telefone cadastrado</>
-          )}
+        <div className="flex items-center justify-between mb-3">
+          <div className="text-gray-400 text-sm">
+            {totalContatos === null ? 'Carregando contatos...' : (
+              <>📇 <span className="text-white font-semibold">{totalContatos}</span> contatos únicos (pacientes + WhatsApp)</>
+            )}
+          </div>
+          <label className="flex items-center gap-2 text-xs text-gray-400 cursor-pointer">
+            <input type="checkbox" checked={modoTeste} onChange={e => setModoTeste(e.target.checked)} className="accent-yellow-600" />
+            Modo teste (máx. 20 contatos)
+          </label>
         </div>
+
+        {!modoTeste && (
+          <div className="bg-red-900/20 border border-red-800/40 rounded-lg p-3 mb-3 text-xs text-red-300">
+            ⚠️ Modo teste desligado — isso vai enviar para TODOS os {totalContatos ?? '...'} contatos de uma vez.
+          </div>
+        )}
 
         <label className="text-gray-400 text-xs block mb-1">Mensagem</label>
         <textarea
@@ -102,7 +129,7 @@ export default function DisparoMassa() {
           onClick={enviar}
           disabled={enviando || !mensagem.trim()}
           className="mt-4 w-full bg-green-700 hover:bg-green-600 disabled:opacity-50 text-white text-sm font-semibold py-2.5 rounded-lg transition-colors">
-          {enviando ? 'Enviando... isso pode levar alguns minutos' : '📤 Enviar para todos os contatos'}
+          {enviando ? 'Enviando... isso pode levar alguns minutos' : modoTeste ? '🧪 Enviar teste (até 20 contatos)' : '📤 Enviar para todos os contatos'}
         </button>
       </div>
 
