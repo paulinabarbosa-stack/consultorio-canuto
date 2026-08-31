@@ -182,6 +182,34 @@ export default function Implantes() {
     return { texto: `Faltam ${dias} dia(s)`, cor: 'text-gray-400' }
   }
 
+  // Retorna o texto/cor a mostrar para um retorno, já considerando se foi
+  // marcado como feito (nesse caso não importa mais a contagem de dias).
+  function statusRetorno(imp: any, dias: number) {
+    const campo = `retorno_${dias}`
+    if (imp[campo]) return { texto: 'Feito ✓', cor: 'text-green-400', feito: true }
+    const base = labelRetorno(diasParaRetorno(imp.data_inicio, dias))
+    return { ...base, feito: false }
+  }
+
+  async function marcarRetorno(id: string, dias: number, concluido: boolean) {
+    const campo = `retorno_${dias}`
+    await supabase.from('implantes').update({ [campo]: concluido }).eq('id', id)
+    if (implanteSelecionado?.id === id) setImplanteSelecionado({ ...implanteSelecionado, [campo]: concluido })
+    await carregar()
+  }
+
+  async function excluirImplante(id: string) {
+    if (!confirm('Tem certeza que deseja excluir este implante? Essa ação não pode ser desfeita, incluindo as parcelas registradas.')) return
+    setSalvando(true)
+    await supabase.from('implante_parcelas').delete().eq('implante_id', id)
+    const { error } = await supabase.from('implantes').delete().eq('id', id)
+    if (error) { alert('Erro ao excluir: ' + error.message); setSalvando(false); return }
+    setImplanteSelecionado(null)
+    setParcelas([])
+    await carregar()
+    setSalvando(false)
+  }
+
   const STATUS = [
     { value: 'em_andamento', label: 'Em andamento', cor: 'bg-blue-900/30 text-blue-400 border-blue-800' },
     { value: 'concluido', label: 'Concluído', cor: 'bg-green-900/30 text-green-400 border-green-800' },
@@ -258,7 +286,7 @@ export default function Implantes() {
             const pago = pagosPorImplante[imp.id] || 0
             const total = parseFloat(imp.valor_total) || 0
             const restante = total - pago
-            const retorno = filtroRetorno ? labelRetorno(diasParaRetorno(imp.data_inicio, filtroRetorno)) : null
+            const retorno = filtroRetorno ? statusRetorno(imp, filtroRetorno) : null
             return (
               <div key={imp.id}
                 onClick={() => abrirImplante(imp)}
@@ -275,8 +303,15 @@ export default function Implantes() {
                       </div>
                       {imp.descricao && <div className="text-gray-400 text-xs mt-0.5">{imp.descricao}</div>}
                       {retorno && (
-                        <div className={`text-xs mt-1 font-semibold ${retorno.cor}`}>
-                          🗓️ Retorno de {filtroRetorno} dias: {retorno.texto}
+                        <div className={`text-xs mt-1 font-semibold flex items-center gap-2 ${retorno.cor}`}>
+                          <span>🗓️ Retorno de {filtroRetorno} dias: {retorno.texto}</span>
+                          {!retorno.feito && (
+                            <button
+                              onClick={(e) => { e.stopPropagation(); marcarRetorno(imp.id, filtroRetorno as number, true) }}
+                              className="text-xs bg-gray-800 hover:bg-green-800 text-gray-400 hover:text-green-300 px-2 py-0.5 rounded transition-colors">
+                              Marcar feito
+                            </button>
+                          )}
                         </div>
                       )}
                     </div>
@@ -322,6 +357,14 @@ export default function Implantes() {
             </div>
 
             <div className="p-5">
+              <div className="flex justify-end mb-4">
+                <button
+                  onClick={() => excluirImplante(implanteSelecionado.id)}
+                  disabled={salvando}
+                  className="text-xs bg-red-900/30 hover:bg-red-900/50 text-red-400 px-3 py-1.5 rounded-lg font-semibold transition-colors disabled:opacity-50">
+                  🗑️ Excluir implante
+                </button>
+              </div>
               <div className="grid grid-cols-3 gap-3 mb-5">
                 <div className="bg-gray-800 rounded-lg p-3 text-center">
                   <div className="text-gray-500 text-xs mb-1">Valor total</div>
@@ -351,11 +394,20 @@ export default function Implantes() {
                 <p className="text-purple-400 text-xs font-semibold mb-2">📅 Retornos (a partir do início em {new Date(implanteSelecionado.data_inicio).toLocaleDateString('pt-BR')})</p>
                 <div className="grid grid-cols-4 gap-2">
                   {OPCOES_RETORNO.map(dias => {
-                    const r = labelRetorno(diasParaRetorno(implanteSelecionado.data_inicio, dias))
+                    const r = statusRetorno(implanteSelecionado, dias)
                     return (
                       <div key={dias} className="text-center">
-                        <div className="text-gray-500 text-xs">{dias} dias</div>
-                        <div className={`text-xs font-semibold ${r.cor}`}>{r.texto}</div>
+                        <div className="text-gray-500 text-xs mb-1">{dias} dias</div>
+                        <div className={`text-xs font-semibold mb-1 ${r.cor}`}>{r.texto}</div>
+                        <label className="flex items-center justify-center gap-1 text-xs text-gray-400 cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={r.feito}
+                            onChange={(e) => marcarRetorno(implanteSelecionado.id, dias, e.target.checked)}
+                            className="accent-purple-600"
+                          />
+                          Feito
+                        </label>
                       </div>
                     )
                   })}
