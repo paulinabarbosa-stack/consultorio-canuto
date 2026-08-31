@@ -5,6 +5,7 @@ import { Send, Plus, X } from 'lucide-react'
 type Mensagem = {
   role: 'user' | 'assistant' | 'secretaria'
   content: string
+  hora?: string
 }
 
 type Conversa = {
@@ -274,7 +275,12 @@ export default function ConversasWhatsApp() {
                         : 'bg-green-800 text-white'
                     }`}
                   >
-                    {msg.content}
+                    <div>{msg.content}</div>
+                    {msg.hora && (
+                      <div className="text-[10px] opacity-60 text-right mt-1">
+                        {new Date(msg.hora).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
+                      </div>
+                    )}
                   </div>
                 </div>
               ))}

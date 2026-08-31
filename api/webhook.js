@@ -258,7 +258,7 @@ async function obterRespostaIA(telefone, mensagemUsuario, historicoAtual) {
   try {
     const saudacao = obterSaudacao();
     const historico = historicoAtual;
-    historico.push({ role: "user", content: mensagemUsuario });
+    historico.push({ role: "user", content: mensagemUsuario, hora: new Date().toISOString() });
 
     let data = await chamarOpenAI(historico, saudacao);
     let mensagemResposta = data?.choices?.[0]?.message;
@@ -267,7 +267,7 @@ async function obterRespostaIA(telefone, mensagemUsuario, historicoAtual) {
     let clinicaIdDaTransferencia = null;
 
     if (mensagemResposta?.tool_calls?.length > 0) {
-      historico.push(mensagemResposta);
+      historico.push({ ...mensagemResposta, hora: new Date().toISOString() });
 
       for (const toolCall of mensagemResposta.tool_calls) {
         const args = JSON.parse(toolCall.function.arguments || "{}");
@@ -277,6 +277,7 @@ async function obterRespostaIA(telefone, mensagemUsuario, historicoAtual) {
           role: "tool",
           tool_call_id: toolCall.id,
           content: resultado,
+          hora: new Date().toISOString(),
         });
       }
 
@@ -287,7 +288,7 @@ async function obterRespostaIA(telefone, mensagemUsuario, historicoAtual) {
 
     const resposta = mensagemResposta?.content || "Desculpe, tive um probleminha. Pode repetir? 😊";
 
-    historico.push({ role: "assistant", content: resposta });
+    historico.push({ role: "assistant", content: resposta, hora: new Date().toISOString() });
     await salvarHistorico(telefone, historico, clinicaIdDaTransferencia);
 
     return resposta;
@@ -377,7 +378,7 @@ export default async function handler(req, res) {
       if (texto === "__MIDIA__") {
         const { mensagens, clinicaId } = await buscarConversa(telefone);
         if (clinicaId) {
-          mensagens.push({ role: "user", content: "[mídia recebida]" });
+          mensagens.push({ role: "user", content: "[mídia recebida]", hora: new Date().toISOString() });
           await salvarHistorico(telefone, mensagens, clinicaId);
           return res.status(200).json({ status: "encaminhado para secretaria" });
         }
@@ -395,7 +396,7 @@ export default async function handler(req, res) {
       const { mensagens, clinicaId } = await buscarConversa(telefone);
 
       if (clinicaId) {
-        mensagens.push({ role: "user", content: texto });
+        mensagens.push({ role: "user", content: texto, hora: new Date().toISOString() });
         await salvarHistorico(telefone, mensagens, clinicaId);
         return res.status(200).json({ status: "encaminhado para secretaria, sem resposta automatica" });
       }

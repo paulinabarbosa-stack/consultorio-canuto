@@ -112,7 +112,7 @@ export default async function handler(req, res) {
     }
 
     const historico = await buscarHistorico(telefone);
-    historico.push({ role: "secretaria", content: mensagem });
+    historico.push({ role: "secretaria", content: mensagem, hora: new Date().toISOString() });
     await salvarHistorico(telefone, historico, clinicaId);
 
     return res.status(200).json({ status: "ok" });
