@@ -106,7 +106,7 @@ export default function Implantes() {
       data_inicio: form.data_inicio,
       observacoes: form.observacoes || null,
       status: 'em_andamento',
-      comissao_dentista: comissaoDentista,
+      comissao_valor_liquido: comissaoDentista,
     }])
     if (error) { alert('Erro: ' + error.message); setSalvando(false); return }
     setModalAberto(false)
