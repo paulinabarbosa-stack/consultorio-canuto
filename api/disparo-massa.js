@@ -41,7 +41,7 @@ async function validarUsuarioAdmin(authHeader) {
 }
 
 async function buscarTodosTelefones() {
-  const url = `${SUPABASE_URL}/rest/v1/conversas_agente?select=telefone`;
+  const url = `${SUPABASE_URL}/rest/v1/pacientes?select=telefone&telefone=not.is.null`;
   const res = await fetch(url, {
     headers: {
       apikey: SUPABASE_SERVICE_ROLE_KEY,
@@ -49,8 +49,18 @@ async function buscarTodosTelefones() {
     },
   });
   const data = await res.json();
-  const telefones = (data || []).map((d) => d.telefone).filter(Boolean);
+  const telefones = (data || [])
+    .map((d) => normalizarTelefone(d.telefone))
+    .filter(Boolean);
   return [...new Set(telefones)];
+}
+
+// Garante o formato que a Meta espera: só dígitos, com código do país (55) na frente.
+function normalizarTelefone(valor) {
+  if (!valor) return null;
+  const numeros = String(valor).replace(/\D/g, "");
+  if (!numeros) return null;
+  return numeros.startsWith("55") ? numeros : `55${numeros}`;
 }
 
 async function enviarMensagemWhatsApp(telefone, mensagem) {

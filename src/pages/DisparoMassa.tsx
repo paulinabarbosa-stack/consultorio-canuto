@@ -10,9 +10,14 @@ export default function DisparoMassa() {
 
   useEffect(() => {
     async function contarContatos() {
-      const { data } = await supabase.from('conversas_agente').select('telefone')
+      const { data } = await supabase.from('pacientes').select('telefone').not('telefone', 'is', null)
       if (data) {
-        const unicos = new Set(data.map((d: any) => d.telefone))
+        const unicos = new Set(
+          data
+            .map((d: any) => (d.telefone || '').replace(/\D/g, ''))
+            .filter(Boolean)
+            .map((n: string) => (n.startsWith('55') ? n : `55${n}`))
+        )
         setTotalContatos(unicos.size)
       }
     }
@@ -58,7 +63,7 @@ export default function DisparoMassa() {
       <div className="mb-6">
         <h2 className="text-white text-lg font-bold">📢 Disparo em Massa</h2>
         <p className="text-gray-500 text-sm mt-1">
-          Envia uma mensagem para todos os números que já conversaram com o agente pelo WhatsApp.
+          Envia uma mensagem para todos os pacientes cadastrados no sistema.
         </p>
       </div>
 
@@ -74,7 +79,7 @@ export default function DisparoMassa() {
       <div className="bg-gray-900 border border-gray-800 rounded-xl p-5 mb-5">
         <div className="text-gray-400 text-sm mb-3">
           {totalContatos === null ? 'Carregando contatos...' : (
-            <>📇 <span className="text-white font-semibold">{totalContatos}</span> contatos únicos cadastrados</>
+            <>📇 <span className="text-white font-semibold">{totalContatos}</span> pacientes com telefone cadastrado</>
           )}
         </div>
 
