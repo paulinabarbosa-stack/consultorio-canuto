@@ -95,7 +95,7 @@ export default function Implantes() {
       return alert('Preencha paciente, dentista, clínica e valor total!')
     setSalvando(true)
     const valorTotal = parseFloat(form.valor_total)
-    const comissaoDentista = valorTotal * 0.40
+    const comissaoDentista = valorTotal * 0.50
 
     const { error } = await supabase.from('implantes').insert([{
       paciente_id: form.paciente_id,
@@ -128,7 +128,7 @@ export default function Implantes() {
     }])
     if (error) { alert('Erro: ' + error.message); setSalvando(false); return }
 
-    const pct = (formParcela.forma_pagamento === 'Dinheiro' || formParcela.forma_pagamento === 'Cheque') ? 40 : 36
+    const pct = (formParcela.forma_pagamento === 'Dinheiro' || formParcela.forma_pagamento === 'Cheque') ? 50 : 46
     await supabase.from('atendimentos').insert([{
       paciente_id: implanteSelecionado.paciente_id,
       clinica_id: implanteSelecionado.clinica_id,
@@ -182,8 +182,6 @@ export default function Implantes() {
     return { texto: `Faltam ${dias} dia(s)`, cor: 'text-gray-400' }
   }
 
-  // Retorna o texto/cor a mostrar para um retorno, já considerando se foi
-  // marcado como feito (nesse caso não importa mais a contagem de dias).
   function statusRetorno(imp: any, dias: number) {
     const campo = `retorno_${dias}`
     if (imp[campo]) return { texto: 'Feito ✓', cor: 'text-green-400', feito: true }
@@ -327,7 +325,7 @@ export default function Implantes() {
 
                 <div className="mt-3 flex items-center justify-between text-xs">
                   <span className="text-gray-500">
-                    Comissão dentista (40%): {fmt(total * 0.40)}
+                    Comissão dentista (50%): {fmt(total * 0.50)}
                   </span>
                   <span>
                     <span className="text-green-400 font-semibold">Pago: {fmt(pago)}</span>
@@ -383,10 +381,10 @@ export default function Implantes() {
               </div>
 
               <div className="bg-yellow-900/20 border border-yellow-800/40 rounded-lg p-3 mb-5">
-                <p className="text-yellow-400 text-xs font-semibold mb-2">💰 Comissão (40% sobre valor total)</p>
+                <p className="text-yellow-400 text-xs font-semibold mb-2">💰 Comissão (50% sobre valor total)</p>
                 <div>
                   <span className="text-gray-400 text-xs">Dentista ({implanteSelecionado.dentistas?.nome}): </span>
-                  <span className="text-yellow-400 font-bold text-sm">{fmt(parseFloat(implanteSelecionado.valor_total) * 0.40)}</span>
+                  <span className="text-yellow-400 font-bold text-sm">{fmt(parseFloat(implanteSelecionado.valor_total) * 0.50)}</span>
                 </div>
               </div>
 
@@ -606,8 +604,8 @@ export default function Implantes() {
               </div>
               {form.valor_total && (
                 <div className="bg-yellow-900/20 border border-yellow-800/40 rounded-lg p-3 text-xs">
-                  <div className="text-yellow-400 font-semibold mb-1">💰 Comissão calculada (40%)</div>
-                  <div className="text-gray-300">Dentista: {(parseFloat(form.valor_total) * 0.40).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</div>
+                  <div className="text-yellow-400 font-semibold mb-1">💰 Comissão calculada (50%)</div>
+                  <div className="text-gray-300">Dentista: {(parseFloat(form.valor_total) * 0.50).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</div>
                 </div>
               )}
               <div>
