@@ -15,6 +15,8 @@ export default function Estoque() {
   const [filtroStatus, setFiltroStatus] = useState('')
   const [clinicaIdUsuario, setClinicaIdUsuario] = useState<string | null>(null)
   const [perfilAdmin, setPerfilAdmin] = useState(true)
+  const [busca, setBusca] = useState('')
+  const [disponibilidade, setDisponibilidade] = useState<Record<string, { clinica: string; quantidade: number }[]>>({})
 
   const [form, setForm] = useState({
     clinica_id: '', nome: '', quantidade: '', quantidade_minima: '5', unidade: ''
@@ -63,6 +65,20 @@ export default function Estoque() {
       if (e) setItens(e)
       if (c) setClinicas(c)
       if (s) setSaidas(s)
+
+      // Disponibilidade cruzada: onde mais (em quais clínicas) cada item tem
+      // estoque, para ajudar a decidir uma transferência quando algo está crítico.
+      const { data: todos } = await supabase.from('estoque').select('nome, quantidade, clinicas(nome)')
+      if (todos) {
+        const mapa: Record<string, { clinica: string; quantidade: number }[]> = {}
+        todos.forEach((item: any) => {
+          if (item.quantidade > 0) {
+            if (!mapa[item.nome]) mapa[item.nome] = []
+            mapa[item.nome].push({ clinica: item.clinicas?.nome || '—', quantidade: item.quantidade })
+          }
+        })
+        setDisponibilidade(mapa)
+      }
     } catch (err) { console.error(err) }
     setLoading(false)
   }
@@ -151,7 +167,8 @@ export default function Estoque() {
     return { label: 'OK', cor: 'text-green-400 bg-green-900/30' }
   }
 
-  const itensFiltrados = filtroStatus ? itens.filter(i => getStatus(i).label === filtroStatus) : itens
+  const itensFiltrados = (filtroStatus ? itens.filter(i => getStatus(i).label === filtroStatus) : itens)
+    .filter(i => i.nome.toLowerCase().includes(busca.toLowerCase()))
   const criticos = itens.filter(i => i.quantidade === 0).length
   const baixos = itens.filter(i => i.quantidade > 0 && i.quantidade <= i.quantidade_minima).length
   const ok = itens.filter(i => i.quantidade > i.quantidade_minima).length
@@ -187,6 +204,13 @@ export default function Estoque() {
 
       {/* Filtros */}
       <div className="flex gap-3 mb-4 flex-wrap">
+        <input
+          type="text"
+          value={busca}
+          onChange={e => setBusca(e.target.value)}
+          placeholder="🔍 Buscar item pelo nome..."
+          className="bg-gray-900 border border-gray-800 text-white rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-green-600 min-w-[240px]"
+        />
         {perfilAdmin && (
           <select value={filtroClinica} onChange={e => setFiltroClinica(e.target.value)}
             className="bg-gray-900 border border-gray-800 text-white rounded-lg px-3 py-2 text-sm focus:outline-none">
@@ -275,6 +299,15 @@ export default function Estoque() {
                       <td className="px-4 py-3 text-gray-400 text-sm">{item.unidade || '—'}</td>
                       <td className="px-4 py-3 text-center">
                         <span className={`text-xs font-semibold px-2 py-1 rounded-full ${status.cor}`}>{status.label}</span>
+                        {status.label === 'Crítico' && disponibilidade[item.nome]?.some(d => d.clinica !== item.clinicas?.nome) && (
+                          <div className="text-[10px] text-gray-400 mt-1 leading-tight">
+                            Disponível em:{' '}
+                            {disponibilidade[item.nome]
+                              .filter(d => d.clinica !== item.clinicas?.nome)
+                              .map(d => `${d.clinica} (${d.quantidade})`)
+                              .join(', ')}
+                          </div>
+                        )}
                       </td>
                       <td className="px-4 py-3 text-center">
                         <button
