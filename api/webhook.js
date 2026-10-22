@@ -119,6 +119,26 @@ const CLINICA_IDS = {
   "rio grande": "9d762f26-e3a8-4649-935a-5579540f536b",
 };
 
+// ─── Links para a secretária chamar o paciente direto no WhatsApp dela ──────
+
+const SISTEMA_URL = "https://consultorio-canuto.vercel.app";
+
+// A Meta às vezes entrega o número de celular brasileiro sem o 9 extra
+// (55 + DDD + 8 dígitos). Para o link wa.me abrir certo, adicionamos o 9.
+function linkWhatsApp(telefone) {
+  let numero = String(telefone || "").replace(/\D/g, "");
+  if (numero.length === 12 && numero.startsWith("55") && /^[6-9]/.test(numero.slice(4))) {
+    numero = numero.slice(0, 4) + "9" + numero.slice(4);
+  }
+  return `https://wa.me/${numero}`;
+}
+
+// Descobre o telefone da secretária a partir do id da clínica gravado na conversa
+function telefoneDaSecretaria(clinicaId) {
+  const chave = Object.keys(CLINICA_IDS).find((k) => CLINICA_IDS[k] === clinicaId);
+  return chave ? CONTATOS_UNIDADES[chave]?.telefone || null : null;
+}
+
 // ─── Definição das funções (tools) que a IA pode chamar ─────────────────────
 
 const TOOLS = [
@@ -162,7 +182,7 @@ async function executarFuncao(nomeFuncao, args, telefonePaciente) {
     const unidade = CONTATOS_UNIDADES[args.unidade];
     if (!unidade) return { resultado: "Unidade não encontrada", clinicaId: null };
 
-    const mensagem = `📋 *Novo atendimento transferido*\n\n👤 Paciente: ${args.nome_paciente}\n📱 Telefone: ${telefonePaciente}\n🦷 Necessidade: ${args.resumo}\n\nPor favor, entre em contato para dar continuidade ao agendamento.`;
+    const mensagem = `📋 *Novo atendimento transferido*\n\n👤 Paciente: ${args.nome_paciente}\n📱 Telefone: ${telefonePaciente}\n🦷 Necessidade: ${args.resumo}\n\n👉 *Toque aqui para chamar o paciente no seu WhatsApp:*\n${linkWhatsApp(telefonePaciente)}\n\n💻 Ou responda pelo sistema (aba Conversas):\n${SISTEMA_URL}`;
     await enviarMensagemWhatsApp(unidade.telefone, mensagem);
 
     const clinicaId = CLINICA_IDS[args.unidade] || null;
@@ -170,7 +190,7 @@ async function executarFuncao(nomeFuncao, args, telefonePaciente) {
   }
 
   if (nomeFuncao === "transferir_para_gerencia") {
-    const mensagem = `⚠️ *Reclamação transferida*\n\n👤 Paciente: ${args.nome_paciente || "não informado"}\n📱 Telefone: ${telefonePaciente}\n📝 Resumo: ${args.resumo}\n\nPor favor, entre em contato o quanto antes.`;
+    const mensagem = `⚠️ *Reclamação transferida*\n\n👤 Paciente: ${args.nome_paciente || "não informado"}\n📱 Telefone: ${telefonePaciente}\n📝 Resumo: ${args.resumo}\n\n👉 *Toque aqui para chamar o paciente no seu WhatsApp:*\n${linkWhatsApp(telefonePaciente)}\n\nPor favor, entre em contato o quanto antes.`;
     await enviarMensagemWhatsApp(CONTATO_GERENCIA.telefone, mensagem);
     return { resultado: "Transferido para a Bia com sucesso", clinicaId: null };
   }
@@ -323,6 +343,16 @@ async function enviarMensagemWhatsApp(telefone, mensagem) {
   }
 }
 
+// Quando o paciente escreve de novo depois de transferido, a IA não responde
+// mais — então avisamos a secretária no WhatsApp dela com o link para chamar.
+async function avisarSecretariaNovaMensagem(clinicaId, telefonePaciente, texto) {
+  const telefoneSecretaria = telefoneDaSecretaria(clinicaId);
+  if (!telefoneSecretaria) return;
+  const trecho = texto.length > 300 ? texto.slice(0, 300) + "…" : texto;
+  const mensagem = `💬 *Paciente respondeu*\n\n📱 ${telefonePaciente}\n"${trecho}"\n\n👉 *Toque para responder no seu WhatsApp:*\n${linkWhatsApp(telefonePaciente)}`;
+  await enviarMensagemWhatsApp(telefoneSecretaria, mensagem);
+}
+
 // ─── Extrair mensagem do payload da Meta ────────────────────────────────────
 
 function extrairMensagem(body) {
@@ -380,6 +410,7 @@ export default async function handler(req, res) {
         if (clinicaId) {
           mensagens.push({ role: "user", content: "[mídia recebida]", hora: new Date().toISOString() });
           await salvarHistorico(telefone, mensagens, clinicaId);
+          await avisarSecretariaNovaMensagem(clinicaId, telefone, "[foto, áudio ou arquivo]");
           return res.status(200).json({ status: "encaminhado para secretaria" });
         }
         await enviarMensagemWhatsApp(
@@ -398,6 +429,7 @@ export default async function handler(req, res) {
       if (clinicaId) {
         mensagens.push({ role: "user", content: texto, hora: new Date().toISOString() });
         await salvarHistorico(telefone, mensagens, clinicaId);
+        await avisarSecretariaNovaMensagem(clinicaId, telefone, texto);
         return res.status(200).json({ status: "encaminhado para secretaria, sem resposta automatica" });
       }
 
