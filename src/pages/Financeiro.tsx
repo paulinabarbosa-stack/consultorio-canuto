@@ -4,13 +4,14 @@ import { supabase } from '../lib/supabase'
 export default function Financeiro() {
   const [carregandoPerfil, setCarregandoPerfil] = useState(true)
   const [perfilUsuario, setPerfilUsuario] = useState<string>('')
+  const [clinicaIdUsuario, setClinicaIdUsuario] = useState<string | null>(null)
 
   const [entradas, setEntradas] = useState<any[]>([])
   const [saidas, setSaidas] = useState<any[]>([])
   const [boletos, setBoletos] = useState<any[]>([])
   const [clinicas, setClinicas] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
-  const [abaAtiva, setAbaAtiva] = useState<'resumo'|'entradas'|'saidas'|'dentistas'|'boletos'>('resumo')
+  const [abaAtiva, setAbaAtiva] = useState<'resumo'|'entradas'|'saidas'|'dentistas'|'boletos'>('entradas')
   const [modalSaida, setModalSaida] = useState(false)
   const [modalBoleto, setModalBoleto] = useState(false)
   const [salvando, setSalvando] = useState(false)
@@ -31,41 +32,60 @@ export default function Financeiro() {
     async function carregarPerfil() {
       const { data: { user } } = await supabase.auth.getUser()
       if (!user) { setCarregandoPerfil(false); return }
-      const { data } = await supabase.from('usuarios').select('perfil').eq('auth_id', user.id).maybeSingle()
-      setPerfilUsuario(data?.perfil || '')
+      const { data } = await supabase.from('usuarios').select('perfil, clinica_id').eq('auth_id', user.id).maybeSingle()
+      const perfil = data?.perfil || ''
+      setPerfilUsuario(perfil)
+      if (data?.clinica_id) {
+        setClinicaIdUsuario(data.clinica_id)
+        setForm(f => ({ ...f, clinica_id: data.clinica_id }))
+      }
+      if (perfil === 'administrador' || perfil === 'gerente') setAbaAtiva('resumo')
       setCarregandoPerfil(false)
     }
     carregarPerfil()
   }, [])
 
-  const acessoLiberado = perfilUsuario === 'administrador' || perfilUsuario === 'gerente'
+  // Administrador e gerente (Paulina, Thiago, Bia) veem tudo; secretária vê só a própria clínica
+  const ehAdmin = perfilUsuario === 'administrador' || perfilUsuario === 'gerente'
 
-  useEffect(() => { if (acessoLiberado) carregar() }, [mes, acessoLiberado])
+  useEffect(() => { if (!carregandoPerfil) carregar() }, [mes, carregandoPerfil, perfilUsuario, clinicaIdUsuario])
 
   async function carregar() {
     setLoading(true)
+
+    // Secretária sem clínica vinculada não vê nada (evita mostrar dados de outras unidades)
+    if (!ehAdmin && !clinicaIdUsuario) {
+      setEntradas([]); setSaidas([]); setBoletos([])
+      setLoading(false)
+      return
+    }
+
     try {
       const inicioMes = mes + '-01'
       const fimMes = mes + '-31'
 
-      const qEntradas = supabase
+      let qEntradas = supabase
         .from('atendimentos')
         .select('*, pacientes(nome), dentistas(nome), clinicas(nome), procedimentos(nome)')
         .gte('data_atendimento', inicioMes)
         .lte('data_atendimento', fimMes)
         .order('data_atendimento', { ascending: false })
 
-      const qSaidas = supabase
+      let qSaidas = supabase
         .from('financeiro_saidas')
         .select('*, clinicas(nome)')
         .gte('data_saida', inicioMes)
         .lte('data_saida', fimMes)
         .order('data_saida', { ascending: false })
 
-      const qBoletos = supabase
-        .from('boletos')
-        .select('*, clinicas(nome)')
-        .order('vencimento', { ascending: true })
+      if (!ehAdmin && clinicaIdUsuario) {
+        qEntradas = qEntradas.eq('clinica_id', clinicaIdUsuario)
+        qSaidas = qSaidas.eq('clinica_id', clinicaIdUsuario)
+      }
+
+      const qBoletos = ehAdmin
+        ? supabase.from('boletos').select('*, clinicas(nome)').order('vencimento', { ascending: true })
+        : Promise.resolve({ data: [] as any[] })
 
       const [{ data: e }, { data: s }, { data: b }, { data: c }] = await Promise.all([
         qEntradas, qSaidas, qBoletos,
@@ -84,8 +104,9 @@ export default function Financeiro() {
     if (!form.descricao || !form.valor || !form.data_saida)
       return alert('Preencha descrição, valor e data!')
     setSalvando(true)
+    const clinicaDaSaida = ehAdmin ? (form.clinica_id || null) : clinicaIdUsuario
     const { error } = await supabase.from('financeiro_saidas').insert([{
-      clinica_id: form.clinica_id || null,
+      clinica_id: clinicaDaSaida,
       descricao: form.descricao,
       valor: parseFloat(form.valor),
       categoria: form.categoria || null,
@@ -93,12 +114,13 @@ export default function Financeiro() {
     }])
     if (error) { alert('Erro: ' + error.message); setSalvando(false); return }
     setModalSaida(false)
-    setForm({ clinica_id: '', descricao: '', valor: '', categoria: '', data_saida: new Date().toISOString().split('T')[0] })
+    setForm({ clinica_id: ehAdmin ? '' : (clinicaIdUsuario || ''), descricao: '', valor: '', categoria: '', data_saida: new Date().toISOString().split('T')[0] })
     await carregar()
     setSalvando(false)
   }
 
   async function salvarBoleto() {
+    if (!ehAdmin) return
     if (!formBoleto.fornecedor || !formBoleto.valor || !formBoleto.total_parcelas || !formBoleto.vencimento_inicial)
       return alert('Preencha fornecedor, valor da parcela, número de parcelas e vencimento inicial!')
     setSalvando(true)
@@ -155,7 +177,7 @@ export default function Financeiro() {
     return '—'
   }
 
-  // Filtragem client-side por clínica (para as abas Entradas/Saídas/Dentistas)
+  // Filtragem client-side por clínica (para as abas Entradas/Saídas/Dentistas — só administração)
   const entradasFiltradas = filtroClinica ? entradas.filter(e => e.clinica_id === filtroClinica) : entradas
   const saidasFiltradas = filtroClinica ? saidas.filter(s => s.clinica_id === filtroClinica) : saidas
 
@@ -234,16 +256,6 @@ export default function Financeiro() {
     return <div className="text-gray-400 text-center p-8">Carregando...</div>
   }
 
-  if (!acessoLiberado) {
-    return (
-      <div className="bg-gray-900 border border-gray-800 rounded-xl p-12 text-center">
-        <div className="text-4xl mb-3">🔒</div>
-        <div className="text-white font-bold mb-1">Acesso restrito</div>
-        <div className="text-gray-400 text-sm">Essa área é visível apenas para administração e gerência.</div>
-      </div>
-    )
-  }
-
   return (
     <div>
       <div className="flex items-center justify-between mb-6">
@@ -252,10 +264,12 @@ export default function Financeiro() {
           <p className="text-gray-500 text-sm">Controle de entradas e saídas</p>
         </div>
         <div className="flex gap-2">
-          <button onClick={() => setModalBoleto(true)}
-            className="bg-purple-800 hover:bg-purple-700 text-white px-4 py-2 rounded-lg text-sm font-semibold transition-colors">
-            + Novo boleto
-          </button>
+          {ehAdmin && (
+            <button onClick={() => setModalBoleto(true)}
+              className="bg-purple-800 hover:bg-purple-700 text-white px-4 py-2 rounded-lg text-sm font-semibold transition-colors">
+              + Novo boleto
+            </button>
+          )}
           <button onClick={() => setModalSaida(true)}
             className="bg-red-800 hover:bg-red-700 text-white px-4 py-2 rounded-lg text-sm font-semibold transition-colors">
             + Registrar saída
@@ -266,11 +280,17 @@ export default function Financeiro() {
       <div className="flex gap-3 mb-6 flex-wrap">
         <input type="month" value={mes} onChange={e => setMes(e.target.value)}
           className="bg-gray-900 border border-gray-800 text-white rounded-lg px-3 py-2 text-sm focus:outline-none" />
-        <select value={filtroClinica} onChange={e => setFiltroClinica(e.target.value)}
-          className="bg-gray-900 border border-gray-800 text-white rounded-lg px-3 py-2 text-sm focus:outline-none">
-          <option value="">Todas as clínicas</option>
-          {clinicas.map(c => <option key={c.id} value={c.id}>{c.nome}</option>)}
-        </select>
+        {ehAdmin ? (
+          <select value={filtroClinica} onChange={e => setFiltroClinica(e.target.value)}
+            className="bg-gray-900 border border-gray-800 text-white rounded-lg px-3 py-2 text-sm focus:outline-none">
+            <option value="">Todas as clínicas</option>
+            {clinicas.map(c => <option key={c.id} value={c.id}>{c.nome}</option>)}
+          </select>
+        ) : (
+          <span className="bg-gray-900 border border-gray-800 text-gray-400 rounded-lg px-3 py-2 text-sm">
+            📍 {clinicas.find(c => c.id === clinicaIdUsuario)?.nome}
+          </span>
+        )}
       </div>
 
       <div className="grid grid-cols-4 gap-4 mb-6">
@@ -293,10 +313,12 @@ export default function Financeiro() {
       </div>
 
       <div className="flex gap-2 mb-4 flex-wrap">
-        <button onClick={() => setAbaAtiva('resumo')}
-          className={`px-4 py-2 rounded-lg text-sm font-semibold transition-colors ${abaAtiva === 'resumo' ? 'bg-purple-900 text-purple-300' : 'bg-gray-900 text-gray-400 hover:text-white'}`}>
-          🏥 Por clínica
-        </button>
+        {ehAdmin && (
+          <button onClick={() => setAbaAtiva('resumo')}
+            className={`px-4 py-2 rounded-lg text-sm font-semibold transition-colors ${abaAtiva === 'resumo' ? 'bg-purple-900 text-purple-300' : 'bg-gray-900 text-gray-400 hover:text-white'}`}>
+            🏥 Por clínica
+          </button>
+        )}
         <button onClick={() => setAbaAtiva('entradas')}
           className={`px-4 py-2 rounded-lg text-sm font-semibold transition-colors ${abaAtiva === 'entradas' ? 'bg-green-900 text-green-300' : 'bg-gray-900 text-gray-400 hover:text-white'}`}>
           📈 Entradas ({entradasFiltradas.length})
@@ -309,15 +331,17 @@ export default function Financeiro() {
           className={`px-4 py-2 rounded-lg text-sm font-semibold transition-colors ${abaAtiva === 'dentistas' ? 'bg-yellow-900 text-yellow-300' : 'bg-gray-900 text-gray-400 hover:text-white'}`}>
           👨‍⚕️ Por dentista ({resumoDentistas.length})
         </button>
-        <button onClick={() => setAbaAtiva('boletos')}
-          className={`px-4 py-2 rounded-lg text-sm font-semibold transition-colors ${abaAtiva === 'boletos' ? 'bg-purple-900 text-purple-300' : 'bg-gray-900 text-gray-400 hover:text-white'}`}>
-          🧾 Boletos ({boletosPorGrupo.length})
-        </button>
+        {ehAdmin && (
+          <button onClick={() => setAbaAtiva('boletos')}
+            className={`px-4 py-2 rounded-lg text-sm font-semibold transition-colors ${abaAtiva === 'boletos' ? 'bg-purple-900 text-purple-300' : 'bg-gray-900 text-gray-400 hover:text-white'}`}>
+            🧾 Boletos ({boletosPorGrupo.length})
+          </button>
+        )}
       </div>
 
       {loading ? (
         <div className="text-gray-400 text-center p-8">Carregando...</div>
-      ) : abaAtiva === 'resumo' ? (
+      ) : abaAtiva === 'resumo' && ehAdmin ? (
         <div className="bg-gray-900 border border-gray-800 rounded-xl overflow-hidden">
           <table className="w-full">
             <thead>
@@ -469,8 +493,8 @@ export default function Financeiro() {
             </table>
           </div>
         )
-      ) : (
-        /* Aba Boletos */
+      ) : ehAdmin ? (
+        /* Aba Boletos (só administração) */
         <div>
           <div className="grid grid-cols-2 gap-4 mb-4">
             <div className="bg-gray-900 border border-gray-800 rounded-xl p-4">
@@ -539,7 +563,7 @@ export default function Financeiro() {
             </div>
           )}
         </div>
-      )}
+      ) : null}
 
       {/* MODAL SAÍDA */}
       {modalSaida && (
@@ -579,11 +603,17 @@ export default function Financeiro() {
                 </div>
                 <div>
                   <label className="text-gray-400 text-xs block mb-1">Clínica</label>
-                  <select value={form.clinica_id} onChange={e => setForm({...form, clinica_id: e.target.value})}
-                    className="w-full bg-gray-800 border border-gray-700 text-white rounded-lg px-3 py-2 text-sm focus:outline-none">
-                    <option value="">Todas</option>
-                    {clinicas.map(c => <option key={c.id} value={c.id}>{c.nome}</option>)}
-                  </select>
+                  {ehAdmin ? (
+                    <select value={form.clinica_id} onChange={e => setForm({...form, clinica_id: e.target.value})}
+                      className="w-full bg-gray-800 border border-gray-700 text-white rounded-lg px-3 py-2 text-sm focus:outline-none">
+                      <option value="">Todas</option>
+                      {clinicas.map(c => <option key={c.id} value={c.id}>{c.nome}</option>)}
+                    </select>
+                  ) : (
+                    <div className="bg-gray-800 border border-gray-700 text-gray-400 rounded-lg px-3 py-2 text-sm">
+                      {clinicas.find(c => c.id === clinicaIdUsuario)?.nome || '—'}
+                    </div>
+                  )}
                 </div>
               </div>
               <div className="flex gap-2 pt-2">
@@ -601,8 +631,8 @@ export default function Financeiro() {
         </div>
       )}
 
-      {/* MODAL BOLETO */}
-      {modalBoleto && (
+      {/* MODAL BOLETO (só administração) */}
+      {modalBoleto && ehAdmin && (
         <div className="fixed inset-0 bg-black/70 z-50 flex items-center justify-center p-4">
           <div className="bg-gray-900 border border-gray-800 rounded-2xl w-full max-w-md">
             <div className="flex items-center justify-between p-5 border-b border-gray-800">
